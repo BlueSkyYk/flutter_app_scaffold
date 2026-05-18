@@ -1,0 +1,22 @@
+include: package:very_good_analysis/analysis_options.yaml
+
+analyzer:
+  exclude:
+    - "**/*.g.dart"
+    - "**/*.freezed.dart"
+    - "lib/generated/**"
+
+linter:
+  rules:
+    public_member_api_docs: false
+    lines_longer_than_80_chars: false
+    avoid_classes_with_only_static_members: false
+    always_use_package_imports: false
+    sort_pub_dependencies: false
+    one_member_abstracts: false
+    use_setters_to_change_properties: false
+    avoid_redundant_argument_values: false
+    avoid_positional_boolean_parameters: false
+    no_runtimetype_tostring: false
+    discarded_futures: false
+    always_put_required_named_parameters_first: false
