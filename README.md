@@ -1,4 +1,4 @@
-# app_scaffold
+# flutter_app_scaffold
 
 Flutter 应用脚手架。一个包搞定新项目最常见的脏活：**启动初始化、网络、存储、路由、主题、错误兜底、页面生命周期**。
 
@@ -12,7 +12,7 @@ Flutter 应用脚手架。一个包搞定新项目最常见的脏活：**启动�
 - 状态管理 / 主题 / loading-empty-error 三态展示
 - 全局未捕获异常要兜底 + 上报
 
-`app_scaffold` 把这些工程化模板抽成单包，业务侧 `pubspec` 加一行即可。
+`flutter_app_scaffold` 把这些工程化模板抽成单包，业务侧 `pubspec` 加一行即可。
 
 ## 二、技术选型
 
@@ -34,24 +34,24 @@ monorepo 同目录：
 
 ```yaml
 dependencies:
-  app_scaffold:
-    path: ../app_scaffold
+  flutter_app_scaffold:
+    path: ../flutter_app_scaffold
 ```
 
 或 git：
 
 ```yaml
 dependencies:
-  app_scaffold:
+  flutter_app_scaffold:
     git:
-      url: https://github.com/your/app_scaffold.git
+      url: https://github.com/your/flutter_app_scaffold.git
       ref: v0.1.0
 ```
 
 业务侧只需一处导入：
 
 ```dart
-import 'package:app_scaffold/app_scaffold.dart';
+import 'package:flutter_app_scaffold/flutter_app_scaffold.dart';
 ```
 
 `flutter_riverpod`、`go_router`、`dio` 已被 re-export，无需重复 import。
@@ -59,7 +59,7 @@ import 'package:app_scaffold/app_scaffold.dart';
 ## 四、快速开始
 
 ```dart
-import 'package:app_scaffold/app_scaffold.dart';
+import 'package:flutter_app_scaffold/flutter_app_scaffold.dart';
 import 'package:flutter/material.dart';
 
 void main() {
@@ -333,7 +333,7 @@ AppBootstrap.run(
 
 ```
 lib/
-├── app_scaffold.dart                 # 统一导出
+├── flutter_app_scaffold.dart                 # 统一导出
 └── src/
     ├── bootstrap/                    # AppBootstrap / AppInitializer
     ├── config/                       # AppConfig / AppEnv

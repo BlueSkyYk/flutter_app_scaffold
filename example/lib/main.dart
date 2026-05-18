@@ -1,4 +1,4 @@
-import 'package:app_scaffold/app_scaffold.dart';
+import 'package:flutter_app_scaffold/flutter_app_scaffold.dart';
 import 'package:flutter/material.dart';
 
 import 'features/auth/auth_controller.dart';
@@ -39,7 +39,7 @@ class ExampleApp extends ConsumerWidget {
     ref.listen(authControllerProvider, (prev, next) => router.refresh());
 
     return MaterialApp.router(
-      title: 'app_scaffold example',
+      title: 'flutter_app_scaffold example',
       theme: AppTheme.light(),
       darkTheme: AppTheme.dark(),
       routerConfig: router,

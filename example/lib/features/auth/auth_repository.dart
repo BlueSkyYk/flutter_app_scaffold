@@ -1,4 +1,4 @@
-import 'package:app_scaffold/app_scaffold.dart';
+import 'package:flutter_app_scaffold/flutter_app_scaffold.dart';
 
 class AuthUser {
   const AuthUser({required this.id, required this.username, required this.token});

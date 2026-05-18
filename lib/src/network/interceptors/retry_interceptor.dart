@@ -14,7 +14,7 @@ class RetryInterceptor extends Interceptor {
   final int maxRetries;
   final Duration initialDelay;
 
-  static const _retryCountKey = '_app_scaffold_retry_count';
+  static const _retryCountKey = '_flutter_app_scaffold_retry_count';
 
   bool _shouldRetry(DioException err) {
     return err.type == DioExceptionType.connectionTimeout ||

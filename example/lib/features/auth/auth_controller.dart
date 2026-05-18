@@ -1,4 +1,4 @@
-import 'package:app_scaffold/app_scaffold.dart';
+import 'package:flutter_app_scaffold/flutter_app_scaffold.dart';
 
 import 'auth_repository.dart';
 

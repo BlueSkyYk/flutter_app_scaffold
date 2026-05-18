@@ -7,7 +7,7 @@ import '../../router/app_route_observer.dart';
 /// - `onPageHide`：当前页被遮挡（push 新页 / 进入后台）。
 /// - `onAppForeground` / `onAppBackground`：应用前后台。
 ///
-/// 使用前提：app_scaffold 提供的 [appRouteObserver] 已挂到 GoRouter / MaterialApp。
+/// 使用前提：flutter_app_scaffold 提供的 [appRouteObserver] 已挂到 GoRouter / MaterialApp。
 abstract class BasePage extends StatefulWidget {
   const BasePage({super.key});
 }

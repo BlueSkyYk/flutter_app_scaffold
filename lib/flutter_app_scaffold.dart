@@ -1,6 +1,6 @@
-/// app_scaffold —— Flutter 应用脚手架。
+/// flutter_app_scaffold —— Flutter 应用脚手架。
 ///
-/// 使用方只需 `import 'package:app_scaffold/app_scaffold.dart';` 即可拿到：
+/// 使用方只需 `import 'package:flutter_app_scaffold/flutter_app_scaffold.dart';` 即可拿到：
 /// - 启动编排（AppBootstrap / AppInitializer）
 /// - 配置（AppConfig / AppEnv）
 /// - 日志（AppLog）

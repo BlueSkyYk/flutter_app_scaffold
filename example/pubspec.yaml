@@ -31,7 +31,7 @@ dependencies:
   flutter:
     sdk: flutter
 
-  app_scaffold:
+  flutter_app_scaffold:
     path: ../
 
   cupertino_icons: ^1.0.8
