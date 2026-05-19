@@ -4,7 +4,7 @@
 /// - 启动编排（AppBootstrap / AppInitializer）
 /// - 配置（AppConfig / AppEnv）
 /// - 日志（AppLog）
-/// - 存储（KvStorage / PrefsStorage / SecureStorage）
+/// - 存储（KvStorage / PrefsStorage）
 /// - 网络（DioClient / ApiResult / ApiException / 拦截器）
 /// - 路由（AppRouter / appRouteObserver）
 /// - 主题（AppTheme / AppColors / AppTextStyles）
@@ -41,6 +41,8 @@ export 'src/network/dio_client.dart';
 export 'src/network/interceptors/auth_interceptor.dart';
 export 'src/network/interceptors/log_interceptor.dart';
 export 'src/network/interceptors/retry_interceptor.dart';
+export 'src/network/interceptors/ui_feedback_interceptor.dart';
+export 'src/network/ui_feedback.dart';
 
 // Router
 export 'src/router/app_route_observer.dart';
@@ -52,7 +54,6 @@ export 'src/state/async_value_x.dart';
 // Storage
 export 'src/storage/kv_storage.dart';
 export 'src/storage/prefs_storage.dart';
-export 'src/storage/secure_storage.dart';
 
 // UI
 export 'src/ui/base/base_page.dart';

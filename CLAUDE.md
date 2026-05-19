@@ -8,6 +8,12 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 The `example/` directory is a working consumer app (login → home, jsonplaceholder API) used as both demo and integration sandbox. README.md (Chinese) is the canonical user-facing documentation.
 
+## Documentation policy
+
+`README.md` is a **usage document**, not a change log. After any code change, update README and the relevant dartdoc to reflect the **current** state of the API — usage examples, configuration options, behavior contracts. **Do not** add per-change history sections, "what changed" callouts, or migration notes; readers should be able to use the README without knowing what version preceded it. There is no `CHANGELOG.md` in this repo by design.
+
+`CLAUDE.md` (this file) is for engineering rules and load-bearing invariants — keep it current too, but in the same style: rules, not history.
+
 ## Common commands
 
 Run from the package root unless noted.
@@ -60,7 +66,11 @@ The whole call is wrapped in `GlobalErrorHandler.run`, so async errors during bo
 
 ### Singleton conventions
 
-`AppConfig`, `PrefsStorage`, `SecureStorage`, `AppLog` use a `.I` (instance) accessor. They are bound once at startup and read everywhere. Tests that touch these need to bind/configure them in `setUp` — there is no automatic reset between tests yet.
+`AppConfig`, `PrefsStorage`, `AppLog` use a `.I` (instance) accessor. They are bound once at startup and read everywhere. Tests that touch these need to bind/configure them in `setUp` — there is no automatic reset between tests yet.
+
+### Dependency boundary
+
+The scaffold deliberately excludes plugins that require project-level native config (Android `minSdkVersion`, iOS entitlements, AndroidManifest permissions). Examples that do **not** belong in this package: `flutter_secure_storage`, `connectivity_plus`, `package_info_plus`, push/location/camera plugins. Business apps add these to their own `pubspec.yaml`. This rule prevents the scaffold's release cadence from being held hostage by a single business app's native config.
 
 ### Network layer
 
@@ -71,7 +81,17 @@ The whole call is wrapped in `GlobalErrorHandler.run`, so async errors during bo
 
 `mapDioException` is the single conversion point from `DioException` to the sealed exception hierarchy. When extending the network layer, route every error through it so the sealed switch in callers stays exhaustive.
 
-`enableNetworkLog` in `AppConfig` toggles the built-in `AppLogInterceptor`. Other interceptors (`AuthInterceptor`, `RetryInterceptor`) are opt-in via `client.addInterceptor(...)`.
+`enableNetworkLog` in `AppConfig` toggles the built-in `AppLogInterceptor`. Other interceptors are opt-in via convenience methods on `DioClient` that auto-bind to the same `Dio` instance:
+
+- `client.enableUiFeedback(UiFeedback)` — loading-counter + error-toast + business-code detection. Per-request override via `Options().ui(loading:?, errorToast:?)` or `Options().silent()`, stored under `kUiFeedbackOverrideKey` in `extra`. The interceptor uses `_kCountedKey` / `_kToastedKey` extra flags to prevent double-decrement / double-toast when an `onResponse` rejection cascades to `onError`.
+- `client.enableAuth(tokenProvider, refreshToken?, shouldRefresh?, onUnauthorized?)` — token injection + 401 refresh-and-retry. Concurrent 401s share a single refresh via the `_refreshing` future field on `AuthInterceptor`. The `_retriedKey` extra marker prevents re-refresh after a retried request still returns 401 (avoids infinite loops).
+- `client.enableRetry(maxRetries, initialDelay)` — exponential-backoff retry for timeout / connection errors only.
+
+**Recommended add-order**: `enableUiFeedback()` → `enableAuth()` → `enableRetry()`. UI feedback sits on the outermost layer of the chain so it sees final outcomes (auth refresh success treated as success; retry exhaustion treated as failure).
+
+`UiFeedbackInterceptor.onResponse` rejects with `DioException(error: BusinessException, type: unknown)` when `detectBusinessError` returns non-null. `mapDioException` therefore checks `e.error is ApiException` first and passes it through verbatim — without that, the business code error would be silently downgraded to `NetworkException` by the type-based switch. Preserve this unwrap when extending the exception mapping.
+
+Manual `client.addInterceptor(AuthInterceptor(..., dio: client.raw))` is still supported but error-prone — prefer the `enableX` methods. When extending `AuthInterceptor`, preserve the single-flight invariant (the `_refreshing` future) and the retry marker semantics; both are load-bearing for correctness under concurrency.
 
 ### Page lifecycle (replaces GetX)
 
@@ -80,6 +100,10 @@ The whole call is wrapped in `GlobalErrorHandler.run`, so async errors during bo
 This only works if the app's router was created via `AppRouter.create`, which auto-attaches `appRouteObserver`. If a consumer constructs `GoRouter` manually they must add `observers: [appRouteObserver]` themselves — otherwise `BasePage` callbacks silently never fire.
 
 The `_isCurrent` / `_isAppForeground` flags coordinate the two observer streams so that backgrounding a covered page doesn't double-fire `onPageHide`. Preserve this invariant when modifying the class.
+
+`RouteObserver.subscribe` internally fires `didPush` once on registration, so the initial route (e.g. `initialLocation` of GoRouter) does receive `onPageShow` even though the actual push happened before `didChangeDependencies` ran. **Do not** add manual `route.isCurrent` re-firing — it would double-fire `onPageShow` on the initial route.
+
+`dispose()` does **not** call `onPageHide` (the page is already unmounted; `setState` / `context` use would throw). Subclasses must do their own cleanup in `dispose`. The normal pop path fires `onPageHide` via `didPop` before `dispose`.
 
 ### Error handling
 

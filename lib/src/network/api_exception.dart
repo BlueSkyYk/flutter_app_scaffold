@@ -56,7 +56,12 @@ class ParseException extends ApiException {
 }
 
 /// 把 DioException 映射成 ApiException。
+///
+/// 若 [DioException.error] 已经是 [ApiException]（例如 `UiFeedbackInterceptor`
+/// 把业务码错误包装后 reject），直接透传，避免被错误地降级成 `NetworkException`。
 ApiException mapDioException(DioException e) {
+  final inner = e.error;
+  if (inner is ApiException) return inner;
   switch (e.type) {
     case DioExceptionType.connectionTimeout:
     case DioExceptionType.sendTimeout:

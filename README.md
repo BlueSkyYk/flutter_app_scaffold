@@ -21,12 +21,13 @@ Flutter 应用脚手架。一个包搞定新项目最常见的脏活：**启动�
 | 状态管理 | [`flutter_riverpod`](https://pub.dev/packages/flutter_riverpod) |
 | 路由 | [`go_router`](https://pub.dev/packages/go_router) |
 | 网络 | [`dio`](https://pub.dev/packages/dio) |
-| 存储 | `shared_preferences` + `flutter_secure_storage` |
+| 存储 | `shared_preferences` |
 | 日志 | `logger` |
-| 设备/网络 | `connectivity_plus` + `package_info_plus` |
 | Lint | `very_good_analysis` |
 
 > **GetX 不再使用**。页面生命周期通过 `RouteObserver` + `WidgetsBindingObserver` 实现，原生方案，包体更小。
+>
+> **不内置的依赖**：脚手架刻意不引入会触发原生工程配置（minSdk / 权限 / entitlement）的插件，例如 `flutter_secure_storage`、`connectivity_plus`、`package_info_plus`、推送 / 定位 / 相机等。需要时由业务自行在自家 `pubspec` 引入，避免脚手架升级和业务原生配置耦合。
 
 ## 三、安装
 
@@ -45,7 +46,7 @@ dependencies:
   flutter_app_scaffold:
     git:
       url: https://github.com/your/flutter_app_scaffold.git
-      ref: v0.1.0
+      ref: main
 ```
 
 业务侧只需一处导入：
@@ -169,14 +170,12 @@ await PrefsStorage.I.setString('uid', '123');
 final uid = await PrefsStorage.I.getString('uid');
 ```
 
-敏感数据（token / 密钥）：
-
-```dart
-await SecureStorage.I.write('access_token', token);
-final token = await SecureStorage.I.read('access_token');
-```
-
 业务侧建议依赖 `KvStorage` 接口而非具体实现，方便测试 mock。
+
+> 敏感数据（access token / refresh token / 密钥）请业务自行引入
+> [`flutter_secure_storage`](https://pub.dev/packages/flutter_secure_storage) 等插件。
+> 脚手架不内置：这类插件会强制 Android `minSdkVersion` / iOS Keychain entitlement
+> 等项目级原生配置，由业务在自家 `pubspec` 显式声明更合适。
 
 ### 5. 网络
 
@@ -187,21 +186,122 @@ final client = DioClient();
 final res = await client.get<Map<String, dynamic>>('/users/me');
 ```
 
-加拦截器：
+#### 启用鉴权（含 token 自动刷新）
+
+`enableAuth` 一行启用：注入 token、检测 401、调用业务侧 refresh、重发原请求。
 
 ```dart
-client.addInterceptor(
-  AuthInterceptor(
-    tokenProvider: () => SecureStorage.I.read('access_token'),
-    onUnauthorized: () async {
-      // 跳登录、清 token
-    },
-  ),
+client.enableAuth(
+  // 每次请求前异步取当前 token
+  tokenProvider: () => secureStorage.read(key: 'access_token'),
+
+  // 配置后即开启 401 → refresh → 重发原请求
+  refreshToken: () async {
+    final rt = await secureStorage.read(key: 'refresh_token');
+    if (rt == null) return null;
+
+    // 推荐用一个独立 Dio 调刷新接口，避免循环
+    final resp = await Dio().post(
+      'https://api.example.com/auth/refresh',
+      data: {'refresh_token': rt},
+    );
+    final newAccess = resp.data['access_token'] as String;
+    await secureStorage.write(key: 'access_token', value: newAccess);
+    return newAccess; // 拦截器拿到新 token 后会重发原请求
+  },
+
+  // refresh 失败 / 未配 refresh / 重发仍失败时调用
+  onUnauthorized: () async {
+    await secureStorage.deleteAll();
+    appRouter.go('/login');
+  },
 );
-client.addInterceptor(RetryInterceptor(dio: client.raw));
 ```
 
-`safeRequest` 把成功/失败封装成 `ApiResult`，业务无需 try-catch：
+刷新机制覆盖的边界：
+
+| 场景 | 行为 |
+|---|---|
+| N 个请求并发 401 | 单飞合并：只刷新 1 次，所有请求共用结果 |
+| 刷新成功 | 自动用新 token 重发原请求，业务方拿到的是 200 |
+| `refreshToken` 抛异常 / 返回 null | 调 `onUnauthorized`，原 401 抛回业务 |
+| 重发后仍 401（新 token 也失效） | 不二次刷新（防死循环），调 `onUnauthorized` |
+| 自定义鉴权语义（200 + 业务 code） | 传 `shouldRefresh: (err) => ...` 覆盖默认判断 |
+
+> 业务负责持久化新 token：`refreshToken` 回调内必须先写入存储，再 `return newAccess`，
+> 这样下次 `tokenProvider()` 才能读到最新值。
+
+#### 启用重试（针对网络层错误）
+
+```dart
+client.enableRetry(maxRetries: 2, initialDelay: Duration(milliseconds: 500));
+```
+
+仅对超时 / 连接错误做指数退避重试。建议 `enableAuth()` → `enableRetry()` 顺序添加。
+
+#### 启用 UI 反馈（loading 遮罩 + 错误 toast）
+
+把"显示 loading / 失败 toast"的样板从每个调用点抽走，业务在启动时一次性注入回调即可：
+
+```dart
+client.enableUiFeedback(UiFeedback(
+  // loading 计数器：0→1 时调 start，N→0 时调 end
+  onLoadingStart: () => globalLoading.show(),
+  onLoadingEnd:   () => globalLoading.hide(),
+
+  // 错误展示（仅 showErrorToast=true 时调）
+  onError: (ApiException e) => Toast.show(e.message),
+
+  // 业务码错误检测：把 200 + 非 0 code 翻译成 BusinessException
+  detectBusinessError: (response) {
+    final data = response.data as Map<String, dynamic>;
+    final code = data['code'] as int? ?? 0;
+    if (code != 0) {
+      return BusinessException(
+        data['msg'] as String? ?? '请求失败',
+        code: code,
+        data: data['data'],
+      );
+    }
+    return null;
+  },
+
+  defaultShowLoading: false,    // 默认不显示遮罩
+  defaultShowErrorToast: true,  // 默认弹错误 toast
+));
+```
+
+调用时按需通过 `Options().ui(...)` / `silent()` 覆盖默认：
+
+```dart
+// 走默认（不显遮罩、错误弹 toast）
+await client.get('/users');
+
+// 关键动作显式开 loading
+await client.post('/login',
+  data: x,
+  options: Options().ui(loading: true),
+);
+
+// 心跳 / 埋点静默
+await client.get('/heartbeat', options: Options().silent());
+
+// 只关 toast、loading 沿用默认
+await client.get('/poll', options: Options().ui(errorToast: false));
+```
+
+行为保证：
+
+| 场景 | 行为 |
+|---|---|
+| 多个并发请求都 `showLoading` | 只调 1 次 `onLoadingStart`、1 次 `onLoadingEnd` |
+| 业务码失败（`detectBusinessError` 返回非 null） | 自动调 `onError` 弹 toast，原 `safeRequest` 拿到 `ApiResult.failure(BusinessException)` |
+| 网络错误 / HTTP 错误 | 调 `onError`，业务侧仍可在 `safeRequest` 里继续处理 |
+
+> **拦截器顺序建议**：`enableUiFeedback()` → `enableAuth()` → `enableRetry()`。
+> UI 反馈在最外圈，能正确捕获最终结果（鉴权刷新成功视为成功，重试穷尽后视为失败）。
+
+#### `safeRequest` 把成功/失败封装成 `ApiResult`，业务无需 try-catch
 
 ```dart
 final result = await client.safeRequest((c) async {
@@ -215,13 +315,17 @@ result.when(
 );
 ```
 
-异常体系（sealed class，`switch` 即可穷举）：
+#### 异常体系（sealed class，`switch` 即可穷举）
 
 - `NetworkException` 网络/超时/连接失败
 - `HttpStatusException` 非 2xx
-- `BusinessException` 业务 code 失败（业务侧自行抛出）
+- `BusinessException` 业务 code 失败（由 `UiFeedback.detectBusinessError` 翻译，或业务自行抛出）
 - `CancelException` 请求取消
 - `ParseException` 解析异常
+
+`mapDioException` 是 `DioException → ApiException` 的唯一转换点。若拦截器把
+`ApiException` 包装在 `DioException.error` 字段里 reject，转换函数会直通透传，不会被
+按 `DioExceptionType` 错误降级——业务码错误能正确流向 `safeRequest`。
 
 ### 6. 路由
 
@@ -273,7 +377,11 @@ class _HomePageState extends BasePageState<HomePage> {
 }
 ```
 
-> 这就是替代 GetX 页面生命周期能力的方案，零三方依赖。
+前提：路由必须挂 `appRouteObserver`（`AppRouter.create` 自动挂；手写 `GoRouter` 时
+请自行 `observers: [appRouteObserver]`，否则页面回调静默不触发）。
+
+`dispose` 不会再回调 `onPageHide`——此时 `mounted=false`，触碰 `setState` / `context`
+会抛错。资源清理请在子类的 `dispose` 中处理。
 
 ### 8. 主题
 
@@ -343,7 +451,7 @@ lib/
     │   └── interceptors/
     ├── router/                       # AppRouter / appRouteObserver
     ├── state/                        # AsyncValue 扩展
-    ├── storage/                      # KvStorage / Prefs / Secure
+    ├── storage/                      # KvStorage / PrefsStorage
     └── ui/
         ├── base/                     # BasePage / BasePageState
         ├── theme/                    # AppTheme / Colors / TextStyles
@@ -364,6 +472,3 @@ lib/
 4. 路由集中放 `lib/router/`，每个 feature 暴露自己的 `RouteBase` 列表
 5. 页面继承 `BasePage`，需要保活的子组件包 `KeepAliveWrapper`
 
-## CHANGELOG
-
-- 0.1.0：首个版本。完成 bootstrap / config / log / storage / network / router / theme / ui / base / error。

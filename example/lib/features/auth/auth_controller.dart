@@ -1,11 +1,16 @@
 import 'package:flutter_app_scaffold/flutter_app_scaffold.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 import 'auth_repository.dart';
 
 export 'auth_repository.dart' show AuthUser;
 
+final secureStorageProvider = Provider<FlutterSecureStorage>((ref) {
+  return const FlutterSecureStorage();
+});
+
 final authRepositoryProvider = Provider<AuthRepository>((ref) {
-  return AuthRepository(secureStorage: SecureStorage.I);
+  return AuthRepository(secureStorage: ref.read(secureStorageProvider));
 });
 
 /// 全局登录状态。data 非空表示已登录。

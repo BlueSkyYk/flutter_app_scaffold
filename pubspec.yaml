@@ -1,6 +1,6 @@
 name: flutter_app_scaffold
 description: Flutter 应用脚手架：启动初始化、网络、存储、路由、主题、错误兜底、页面生命周期一站式封装。
-version: 0.1.0
+version: 0.2.0
 
 environment:
   sdk: ^3.11.5
@@ -23,13 +23,9 @@ dependencies:
 
   # 存储
   shared_preferences: ^2.5.5
-  flutter_secure_storage: ^10.2.0
 
-  # 工具
+  # 日志
   logger: ^2.7.0
-  connectivity_plus: ^7.1.1
-  package_info_plus: ^10.1.0
-  intl: ^0.20.2
 
 dev_dependencies:
   flutter_test:

@@ -3,6 +3,10 @@ import 'package:dio/dio.dart';
 import '../../log/app_log.dart';
 
 /// 简单的指数退避重试，针对超时 / 连接错误。
+///
+/// 注意：[dio] 必须是发起原请求的同一个 [Dio] 实例（即 `DioClient.raw`），
+/// 否则重试请求会绕过 `DioClient` 上注册的其它拦截器（如 `AuthInterceptor`）。
+/// 推荐通过 `DioClient.enableRetry(...)` 启用，以避免传错实例。
 class RetryInterceptor extends Interceptor {
   RetryInterceptor({
     required this.dio,
@@ -10,8 +14,13 @@ class RetryInterceptor extends Interceptor {
     this.initialDelay = const Duration(milliseconds: 500),
   });
 
+  /// 用于重发请求的 dio 实例，应与原请求所在的 `DioClient.raw` 相同。
   final Dio dio;
+
+  /// 最大重试次数（不含首发）。
   final int maxRetries;
+
+  /// 首次退避时间，第 N 次重试为 `initialDelay * 2^(N-1)`。
   final Duration initialDelay;
 
   static const _retryCountKey = '_flutter_app_scaffold_retry_count';

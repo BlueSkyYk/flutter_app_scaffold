@@ -22,6 +22,11 @@ class _LoginPageState extends BasePageState<LoginPage> {
   }
 
   @override
+  void onPageHide() {
+    AppLog.d('[LoginPage] onPageHide');
+  }
+
+  @override
   void dispose() {
     _usernameCtrl.dispose();
     _passwordCtrl.dispose();
@@ -31,7 +36,9 @@ class _LoginPageState extends BasePageState<LoginPage> {
   Future<void> _submit(WidgetRef ref) async {
     if (!(_formKey.currentState?.validate() ?? false)) return;
     FocusScope.of(context).unfocus();
-    await ref.read(authControllerProvider.notifier).login(
+    await ref
+        .read(authControllerProvider.notifier)
+        .login(
           username: _usernameCtrl.text.trim(),
           password: _passwordCtrl.text,
         );

@@ -34,6 +34,9 @@ dependencies:
   flutter_app_scaffold:
     path: ../
 
+  # 业务自行决定是否引入 secure storage（涉及 Android minSdk / iOS Keychain 配置）
+  flutter_secure_storage: ^10.2.0
+
   cupertino_icons: ^1.0.8
 
 dev_dependencies:
