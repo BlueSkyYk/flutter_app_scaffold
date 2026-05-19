@@ -88,7 +88,7 @@ class MyApp extends StatelessWidget {
   Widget build(BuildContext context) {
     final router = AppRouter.create(
       routes: [
-        GoRoute(path: '/', builder: (_, __) => const HomePage()),
+        GoRoute(path: '/', builder: (_, _) => const HomePage()),
       ],
     );
     return MaterialApp.router(
@@ -333,8 +333,8 @@ result.when(
 final router = AppRouter.create(
   initialLocation: '/home',
   routes: [
-    GoRoute(path: '/login', builder: (_, __) => const LoginPage()),
-    GoRoute(path: '/home', builder: (_, __) => const HomePage()),
+    GoRoute(path: '/login', builder: (_, _) => const LoginPage()),
+    GoRoute(path: '/home', builder: (_, _) => const HomePage()),
   ],
   redirect: (context, state) {
     // 鉴权重定向
@@ -343,44 +343,82 @@ final router = AppRouter.create(
 );
 ```
 
-`AppRouter.create` 会自动挂上 `appRouteObserver`，`BasePage` 才能感知 push/pop。
+`AppRouter.create` 会自动挂上 `appRouteObserver`，`BasePage` / `PageLifecycleMixin`
+才能感知 push/pop。
 
-### 7. 页面基类 `BasePage`
+### 7. 页面写法与生命周期
 
-继承 `BasePageState`，重写四个钩子：
+页面有两个独立的诉求维度：**是否需要 Riverpod `ref`** 和 **是否需要页面级生命周期**
+（`onPageShow / onPageHide / onAppForeground / onAppBackground`）。按需要组合，避免一律继承同一个基类。
+
+| 需要 ref | 需要生命周期 | 推荐写法 |
+|---|---|---|
+| ❌ | ❌ | `StatelessWidget` / `StatefulWidget` |
+| ✅ | ❌ | `ConsumerWidget` / `ConsumerStatefulWidget` |
+| ❌ | ✅ | `BasePage` + `BasePageState` |
+| ✅ | ✅ | `ConsumerStatefulWidget` + `PageLifecycleMixin` |
+
+四个生命周期钩子的语义：
+
+- `onPageShow`：当前页变为顶层（首次进入 / 从下一页返回 / 从后台回前台）。
+- `onPageHide`：当前页被遮挡（push 新页 / 进入后台）。
+- `onAppForeground` / `onAppBackground`：应用前后台切换。
+
+**前提**：路由必须挂 `appRouteObserver`。`AppRouter.create` 自动挂；手写 `GoRouter`
+时自行 `observers: [appRouteObserver]`，否则回调静默不触发。
+
+#### 只要生命周期：`BasePage` + `BasePageState`
 
 ```dart
-class HomePage extends BasePage {
-  const HomePage({super.key});
+class TrackingPage extends BasePage {
+  const TrackingPage({super.key});
   @override
-  State<HomePage> createState() => _HomePageState();
+  State<TrackingPage> createState() => _TrackingPageState();
 }
 
-class _HomePageState extends BasePageState<HomePage> {
+class _TrackingPageState extends BasePageState<TrackingPage> {
   @override
-  void onPageShow() {
-    // 首次进入 / 从下一页返回 / 从后台回前台 都会触发
-    AppLog.i('home shown');
-  }
+  void onPageShow() => Analytics.track('tracking_show');
 
   @override
-  void onPageHide() {}
-
-  @override
-  void onAppForeground() {}
-
-  @override
-  void onAppBackground() {}
+  void onPageHide() => Analytics.track('tracking_hide');
 
   @override
   Widget build(BuildContext context) => const Scaffold(/* ... */);
 }
 ```
 
-前提：路由必须挂 `appRouteObserver`（`AppRouter.create` 自动挂；手写 `GoRouter` 时
-请自行 `observers: [appRouteObserver]`，否则页面回调静默不触发）。
+#### 同时要 ref 和生命周期：`PageLifecycleMixin`
 
-`dispose` 不会再回调 `onPageHide`——此时 `mounted=false`，触碰 `setState` / `context`
+`PageLifecycleMixin<T>` 可以应用到任意 `State<T>` 子类（包括 `ConsumerState`），
+提供与 `BasePageState` 等价的钩子，无需嵌套 `Consumer`：
+
+```dart
+class LoginPage extends ConsumerStatefulWidget {
+  const LoginPage({super.key});
+  @override
+  ConsumerState<LoginPage> createState() => _LoginPageState();
+}
+
+class _LoginPageState extends ConsumerState<LoginPage>
+    with PageLifecycleMixin<LoginPage> {
+  @override
+  void onPageShow() => AppLog.d('[LoginPage] show');
+
+  @override
+  Widget build(BuildContext context) {
+    final auth = ref.watch(authControllerProvider); // ref 直接可用
+    return Scaffold(/* ... */);
+  }
+}
+```
+
+`BasePageState` 内部也是基于 `PageLifecycleMixin` 实现，二者行为等价 ——
+选 `BasePageState` 还是 mixin 取决于"需不需要同时拿 ref"。
+
+#### 注意
+
+`dispose` 阶段不会再回调 `onPageHide`——此时 `mounted=false`，触碰 `setState` / `context`
 会抛错。资源清理请在子类的 `dispose` 中处理。
 
 ### 8. 主题
@@ -453,7 +491,7 @@ lib/
     ├── state/                        # AsyncValue 扩展
     ├── storage/                      # KvStorage / PrefsStorage
     └── ui/
-        ├── base/                     # BasePage / BasePageState
+        ├── base/                     # BasePage / BasePageState / PageLifecycleMixin
         ├── theme/                    # AppTheme / Colors / TextStyles
         └── widgets/                  # Loading/Empty/Error/AsyncValueView/KeepAlive
 ```
@@ -470,5 +508,6 @@ lib/
 2. Repository 返回 `ApiResult<T>` 而非抛异常
 3. 数据模型用 `freezed`（业务侧自行加，脚手架不强绑定）
 4. 路由集中放 `lib/router/`，每个 feature 暴露自己的 `RouteBase` 列表
-5. 页面继承 `BasePage`，需要保活的子组件包 `KeepAliveWrapper`
+5. 页面按需选型：纯展示用 `ConsumerWidget`；需要本地 state + ref 用 `ConsumerStatefulWidget`；
+   需要页面生命周期再加 `PageLifecycleMixin`（或单纯继承 `BasePage`）。需要保活的子组件包 `KeepAliveWrapper`。
 
