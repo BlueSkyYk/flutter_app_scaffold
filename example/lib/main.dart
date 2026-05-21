@@ -6,7 +6,7 @@ void main() {
   AppBootstrap.run(
     config: const AppConfig(
       env: AppEnv.dev,
-      apiBaseUrl: 'https://dev.sparktechapps.com/omflo',
+      apiBaseUrl: 'http://10.42.0.135:8085/dev/api',
     ),
     app: () => const ProviderScope(child: ExampleApp()),
   );

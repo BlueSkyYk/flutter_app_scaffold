@@ -39,13 +39,19 @@ class HomePage extends ConsumerWidget {
             ),
             const SizedBox(height: 12),
             Text(
-              '已登录：${user?.username ?? '-'}',
+              '已登录：${user?.nickname ?? '-'}',
               style: Theme.of(context).textTheme.titleMedium,
             ),
             const SizedBox(height: 4),
             Text(
               'token: ${user?.token ?? '-'}',
               style: Theme.of(context).textTheme.bodySmall,
+            ),
+            const SizedBox(height: 24),
+            FilledButton.icon(
+              icon: const Icon(Icons.dynamic_feed_outlined),
+              label: const Text('看看动态'),
+              onPressed: () => context.push('/feed'),
             ),
           ],
         ),

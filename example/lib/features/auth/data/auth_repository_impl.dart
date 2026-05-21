@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter_app_scaffold/flutter_app_scaffold.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
@@ -22,17 +24,11 @@ class AuthRepositoryImpl implements AuthRepository {
   final AuthApi api;
   final FlutterSecureStorage secureStorage;
 
-  static const _tokenKey = 'access_token';
-  static const _refreshTokenKey = 'refresh_token';
-  static const _userIdKey = 'user_id';
-  static const _usernameKey = 'username';
+  static const _userJsonKey = 'user_json';
 
   @override
-  Future<AuthUser> login({
-    required String username,
-    required String password,
-  }) async {
-    final dto = await api.login(username: username, password: password);
+  Future<AuthUser> login({required String phone, required String code}) async {
+    final dto = await api.login(phone: phone, code: code);
     await _persist(dto);
     return _toEntity(dto);
   }
@@ -50,38 +46,54 @@ class AuthRepositoryImpl implements AuthRepository {
 
   @override
   Future<AuthUser?> restore() async {
-    final token = await secureStorage.read(key: _tokenKey);
-    final id = await secureStorage.read(key: _userIdKey);
-    final username = await secureStorage.read(key: _usernameKey);
-    if (token == null || id == null || username == null) return null;
-    return AuthUser(id: id, username: username, token: token);
+    final json = await secureStorage.read(key: _userJsonKey);
+    if (json == null || json.isEmpty) {
+      return null;
+    }
+    try {
+      final user = AuthUser.fromJson(jsonDecode(json));
+      if (!user.token.isNullOrEmpty && !user.refreshToken.isNullOrEmpty) {
+        return user;
+      }
+    } catch (e) {
+      AppLog.e('[auth] restore user json failed: $e');
+    }
+    return null;
   }
 
   // ── 私有辅助:持久化 / DTO 转换 ──────────────────────────────
 
   Future<void> _persist(LoginResponseDto dto) async {
-    await secureStorage.write(key: _tokenKey, value: dto.accessToken);
-    await secureStorage.write(key: _userIdKey, value: dto.userId);
-    await secureStorage.write(key: _usernameKey, value: dto.username);
-    if (dto.refreshToken != null) {
-      await secureStorage.write(key: _refreshTokenKey, value: dto.refreshToken);
+    final user = AuthUser.fromDto(dto);
+    if (!user.token.isNullOrEmpty && !user.refreshToken.isNullOrEmpty) {
+      await secureStorage.write(
+        key: _userJsonKey,
+        value: jsonEncode(user.toJson()),
+      );
     }
   }
 
   Future<void> _clear() async {
-    await secureStorage.delete(key: _tokenKey);
-    await secureStorage.delete(key: _refreshTokenKey);
-    await secureStorage.delete(key: _userIdKey);
-    await secureStorage.delete(key: _usernameKey);
+    await secureStorage.delete(key: _userJsonKey);
   }
 
   /// DTO → Entity:只保留 domain 需要的字段。
   /// refreshToken 是 data 层细节(用于刷新流程),domain 不暴露。
   AuthUser _toEntity(LoginResponseDto dto) {
     return AuthUser(
-      id: dto.userId,
-      username: dto.username,
-      token: dto.accessToken,
+      avatar: dto.avatar,
+      gender: dto.gender,
+      birthday: dto.birthday,
+      id: dto.id,
+      nickname: dto.nickname,
+      phone: dto.phone,
+      playstyle: dto.playstyle,
+      registerTime: dto.registerTime,
+      selfIntroduction: dto.selfIntroduction,
+      role: dto.role,
+      status: dto.status,
+      token: dto.token,
+      refreshToken: dto.refreshToken,
     );
   }
 }

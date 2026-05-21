@@ -65,3 +65,6 @@ export 'src/ui/widgets/empty_view.dart';
 export 'src/ui/widgets/error_view.dart';
 export 'src/ui/widgets/keep_alive_wrapper.dart';
 export 'src/ui/widgets/loading_view.dart';
+
+// Utils
+export 'src/utils/string_utils.dart';

@@ -432,6 +432,10 @@ MaterialApp(
 );
 ```
 
+### 0. Riverpod 完整指南
+
+📖 **完整的 Riverpod 实战手册见 [docs/riverpod-guide.md](docs/riverpod-guide.md)**，覆盖心智模型、Provider 选型、`autoDispose` 生命周期、`AsyncValue` 三态、自动重试陷阱、跨页面联动、错误处理分层、测试与调试。下面 §9-§11 是几个最常用的快查；深入用法请直接读完整指南。
+
 ### 9. AsyncValue 三态视图
 
 配合 Riverpod 的 `AsyncValue` 直接渲染 loading / data / error / empty：
@@ -455,7 +459,177 @@ class UserListPage extends ConsumerWidget {
 }
 ```
 
-### 10. 错误兜底
+### 10. AsyncNotifier 自动重试（Riverpod 3 默认行为）
+
+> ⚠️ **必读陷阱**：Riverpod 3 给所有 `AsyncNotifier` / `FutureProvider` / `StreamProvider` **默认开启了指数退避自动重试**：
+
+- 当 `build()` 抛出 `Exception`（不抛 `Error`）时触发
+- 默认 **最多 10 次**，间隔 200ms → 400 → 800 → 1.6s → 3.2s → 6.4s（封顶），累计约 **38 秒**
+- 重试期间 `state` 是 `AsyncError(retrying: true)`，UI 看到的就是"加载很久 → 才显示错误"
+
+源码：`riverpod/lib/src/core/provider_container.dart` 的 `defaultRetry`。
+
+#### 三种关闭粒度
+
+```dart
+// ① 单 provider 关闭（推荐用于列表/分页等"用户能手动重试"的页面）
+final feedControllerProvider =
+    AsyncNotifierProvider.autoDispose<FeedController, FeedState>(
+  FeedController.new,
+  retry: (retryCount, error) => null,
+);
+
+// ② 全局关闭（在 ProviderScope 上）
+ProviderScope(
+  retry: (retryCount, error) => null,
+  child: const MyApp(),
+)
+
+// ③ 自定义策略（只重 1 次、只对网络错）
+retry: (retryCount, error) {
+  if (retryCount >= 1) return null;
+  if (error is! NetworkException) return null;
+  return const Duration(milliseconds: 500);
+}
+```
+
+#### 何时保留 / 何时关闭
+
+| 场景 | 建议 |
+| --- | --- |
+| 列表 / 分页 / 详情页（有手动"重试"按钮） | **关闭**，让用户立刻看到错误并主动重试 |
+| Token restore、配置拉取等长生命周期且能"自然恢复" | **保留默认 10 次** |
+| 加载没有重试 UI、且失败影响小 | 保留，但调小到 2~3 次 |
+
+#### 与 `DioClient.enableRetry` 的关系
+
+两层独立、**会叠加**：dio 层重试针对 HTTP 超时 / 连接错（默认 2 次），Riverpod 层重试针对 `build()` 抛出的任何 `Exception`（默认 10 次）。最坏情况下一次"逻辑失败"会触发 `(1 + dio重试) × (1 + riverpod重试) = 33` 次实际 HTTP，跨度可达数分钟。**两层都开默认值时一定要有意识地评估 UI 反馈延迟。**
+
+### 11. `autoDispose` 生命周期
+
+`autoDispose` 是 Riverpod 控制 Provider 生命周期的修饰符。一句话:**没人监听就销毁,有人监听就保活**。
+
+#### 监听计数规则
+
+| 操作 | 计数变化 |
+| --- | --- |
+| `ref.watch(p)` 出现在 widget build 中 | +1（widget 还活着就一直 +1） |
+| widget 被销毁 / `ref.watch` 不再出现 | -1 |
+| `ref.listen(p, ...)` 注册 | +1 |
+| `ref.read(p)` 一次性读取 | **不计数** |
+| 另一个 provider 内部 `ref.watch(p)` | +1（那个 provider 活着就 +1） |
+
+普通 `Provider`：计数到 0 不销毁，整个 ProviderContainer 生命周期都在。
+`Provider.autoDispose`：计数到 0 的下一帧 → 调 `onDispose` → 销毁实例 → 下次 watch 重建。
+
+#### 何时用 / 不用
+
+| 场景 | 用 autoDispose 吗 |
+| --- | --- |
+| 页面专属数据（列表 / 详情 / 搜索结果 / 表单草稿） | ✅ |
+| 大对象、占内存的数据（图片缓存、长列表） | ✅ |
+| 带订阅的资源（WebSocket / Timer / Stream） | ✅，配合 `ref.onDispose` 关流 |
+| 全局长生命周期状态（登录态、当前用户、主题） | ❌ |
+| 单例服务（`DioClient` / `FlutterSecureStorage`） | ❌ |
+
+经验法则：**"路由全部 pop 后这个状态还有意义吗？"** —— 没有就 autoDispose。
+
+#### 跨页面共享时的"接力"
+
+```
+列表页 watch(feedProvider)         → 计数 1，创建实例
+进详情，详情也 watch(feedProvider)  → 计数 2
+detail pop，列表又是唯一监听者      → 计数 1，实例保留
+列表页 pop                         → 计数 0，销毁
+```
+
+监听者从未归零，实例就一直存活 —— 这就是"列表 → 详情 → 列表"中详情改的 state 列表能看到的原因。
+
+#### `ref.keepAlive()`：临时延寿
+
+需要"页面 pop 后保留 N 秒、N 秒内再进直接复用"的语义：
+
+```dart
+class FooController extends AsyncNotifier<Foo> {
+  @override
+  Future<Foo> build() async {
+    final link = ref.keepAlive();          // 取消"无监听者就销毁"
+    Timer(const Duration(minutes: 5), link.close); // 5 分钟后允许销毁
+    return await api.fetch();
+  }
+}
+```
+
+常见场景：
+- 拉一次缓存 N 分钟
+- 异步保存还没完时不许销毁
+- 后台下载任务跑完才能放
+
+#### `ref.onDispose`：关闭外部资源
+
+```dart
+@override
+Future<Foo> build() async {
+  final timer = Timer.periodic(...);
+  final sub = stream.listen(...);
+  ref.onDispose(() {
+    timer.cancel();
+    sub.cancel();
+  });
+  return ...;
+}
+```
+
+Stream / Timer / WebSocket / 文件句柄等外部资源都要在这里关。
+
+#### 高频踩坑
+
+**坑 1：async 操作中页面 pop → "Notifier was disposed"**
+
+```dart
+Future<void> like(String id) async {
+  state = AsyncData(...);
+  await api.like(id);             // ← 期间用户 pop 了
+  if (!ref.mounted) return;        // ← 必须检查，否则下行会抛
+  state = AsyncData(...);
+}
+```
+
+**坑 2：`ref.read` 不能保活**
+
+```dart
+@override
+void initState() {
+  super.initState();
+  ref.read(myAutoDisposeProvider); // 一次性读，不计数 → 下一帧无 watch 就销毁
+}
+```
+
+保活靠 `ref.watch` / `ref.listen`，不是 `ref.read`。
+
+**坑 3：autoDispose 抖动（频繁创建销毁）**
+
+页面快速进出 / 切 Tab / `select` 误用，会导致 provider 反复创建销毁、接口被多次调用。用 `keepAlive()` 短保活 / 检查 widget 是否抖动重建。
+
+**坑 4：autoDispose provider 之间互相 watch**
+
+容易写出"a 销毁 → b 销毁 → 无人 watch a → 重建"的循环。互相依赖时尽量用 `ref.read`。
+
+#### 调试技巧
+
+```dart
+class _DebugObserver extends ProviderObserver {
+  @override
+  void didAddProvider(...) => AppLog.d('add: $provider');
+  @override
+  void didDisposeProvider(...) => AppLog.d('dispose: $provider');
+}
+ProviderScope(observers: [_DebugObserver()], child: ...);
+```
+
+DevTools 的 Riverpod 面板可以实时看每个 provider 的状态、监听者数量、是否 autoDispose。
+
+### 12. 错误兜底
 
 `AppBootstrap.run` 已自动安装。接入上报：
 

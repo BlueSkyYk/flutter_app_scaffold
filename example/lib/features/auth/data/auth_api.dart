@@ -1,3 +1,4 @@
+import 'package:example/core/network/http_parser.dart';
 import 'package:flutter_app_scaffold/flutter_app_scaffold.dart';
 
 import '../../../core/network/dio_provider.dart';
@@ -28,25 +29,15 @@ class AuthApi {
   /// return LoginResponseDto.fromJson(res.data!);
   /// ```
   Future<LoginResponseDto> login({
-    required String username,
-    required String password,
+    required String phone,
+    required String code,
   }) async {
     AppLog.i('[auth-api] POST /auth/login (mock)');
-    await Future<void>.delayed(const Duration(seconds: 1));
-
-    if (username == 'demo' && password == 'demo123') {
-      return LoginResponseDto(
-        userId: '1',
-        username: username,
-        accessToken: 'mock-token-${DateTime.now().millisecondsSinceEpoch}',
-        refreshToken: 'mock-refresh-token',
-      );
-    }
-    // 模拟后端返回业务错误码(账号或密码错误)。
-    // 真实情况下后端会返回非 2xx,DioClient 会抛 DioException,
-    // 经过 mapDioException 后变成 ApiException 系列;
-    // 这里直接抛 BusinessException,效果与真实链路一致。
-    throw const BusinessException('账号或密码错误', code: 4001);
+    final res = await _dio.post(
+      "/user/login",
+      data: {"phone": phone, "code": code},
+    );
+    return parseModel(response: res, parser: LoginResponseDto.fromJson);
   }
 
   /// 登出。

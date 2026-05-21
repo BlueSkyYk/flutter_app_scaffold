@@ -7,8 +7,8 @@ import 'auth_user.dart';
 /// controller 完全不用动 —— 这是 DDD/Clean Architecture 的核心收益。
 abstract class AuthRepository {
   Future<AuthUser> login({
-    required String username,
-    required String password,
+    required String phone,
+    required String code,
   });
 
   Future<void> logout();

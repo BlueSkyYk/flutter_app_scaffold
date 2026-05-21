@@ -20,14 +20,9 @@ class AuthController extends AsyncNotifier<AuthUser?> {
   @override
   Future<AuthUser?> build() => _repo.restore();
 
-  Future<void> login({
-    required String username,
-    required String password,
-  }) async {
+  Future<void> login({required String phone, required String code}) async {
     state = const AsyncLoading();
-    state = await AsyncValue.guard(
-      () => _repo.login(username: username, password: password),
-    );
+    state = await AsyncValue.guard(() => _repo.login(phone: phone, code: code));
   }
 
   Future<void> logout() async {
@@ -36,5 +31,6 @@ class AuthController extends AsyncNotifier<AuthUser?> {
   }
 }
 
-final authControllerProvider =
-    AsyncNotifierProvider<AuthController, AuthUser?>(AuthController.new);
+final authControllerProvider = AsyncNotifierProvider<AuthController, AuthUser?>(
+  AuthController.new,
+);

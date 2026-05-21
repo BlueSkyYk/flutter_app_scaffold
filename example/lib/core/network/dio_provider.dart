@@ -1,6 +1,8 @@
+import 'package:example/app/configs.dart';
 import 'package:flutter_app_scaffold/flutter_app_scaffold.dart';
 
 import '../storage/secure_storage_provider.dart';
+import 'http_result.dart';
 
 /// 全局 [DioClient] Provider。
 ///
@@ -15,8 +17,28 @@ final dioProvider = Provider<DioClient>((ref) {
   final client = DioClient()
     // ① UI 反馈(loading / 错误 toast):需要业务工程实现 UiFeedback 接口,
     //   实现后取消下行注释即可。
-    // ..enableUiFeedback(MyUiFeedback())
-
+    ..enableUiFeedback(
+      UiFeedback(
+        onLoadingStart: () {},
+        onLoadingEnd: () {},
+        detectBusinessError: (response) {
+          final body = response.data;
+          if (body is! Map<String, dynamic>) return null;
+          final envelope = HttpResult<dynamic>.fromJson(body);
+          if (envelope.code == Configs.httpBusinessSuccessCode) {
+            return null; // 业务成功,放行
+          }
+          return BusinessException(
+            // 业务失败,抛异常
+            envelope.message ?? '网络出错，请稍后再试',
+            code: envelope.code ?? -1,
+            data: envelope.data,
+          );
+        },
+        defaultShowErrorToast: true,
+        defaultShowLoading: true,
+      ),
+    )
     // ② 鉴权:每次请求自动注入 Bearer token。
     //   refreshToken 暂不接,401 时返回 onUnauthorized 让上层(controller / router)
     //   自行处理(例如清空登录态、跳登录页)。真实接刷新时取消下面 refreshToken 的注释。
@@ -28,9 +50,8 @@ final dioProvider = Provider<DioClient>((ref) {
       //   return newToken;
       // },
     )
-
     // ③ 重试:仅对超时 / 连接错误生效,业务错误不重试。
-    ..enableRetry();
+    ..enableRetry(maxRetries: 0);
 
   return client;
 });

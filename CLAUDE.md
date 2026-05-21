@@ -109,6 +109,36 @@ The `_isCurrent` / `_isAppForeground` flags coordinate the two observer streams 
 
 `GlobalErrorHandler` is the only place that installs `FlutterError.onError`, `PlatformDispatcher.instance.onError`, and `runZonedGuarded`. Never install these elsewhere — the reporter contract assumes a single sink. Consumers plug in their own `ErrorReporter` (e.g., Sentry) at boot.
 
+### Riverpod `autoDispose` lifecycle
+
+`autoDispose` providers are reference-counted: each `ref.watch` / `ref.listen` adds a listener, each unmount removes one. When the count hits zero the provider is disposed on the next frame and recreated on next watch. `ref.read` does **not** count — using `ref.read` in `initState` does not keep an autoDispose provider alive.
+
+Conventions for this codebase:
+
+- **Page-scoped state** (lists, details, forms, search results) → use `autoDispose`. Memory frees on navigation pop. Cross-page sharing still works because the source page stays mounted while its detail is on top of the stack.
+- **Long-lived global state** (auth, theme, current user, singletons like `DioClient` / `FlutterSecureStorage`) → plain `Provider` / `NotifierProvider`, never autoDispose.
+- **External resources** (Timer, StreamSubscription, WebSocket) acquired inside `build()` must be released in `ref.onDispose(() { ... })` — not doing so leaks the resource across rebuilds.
+
+Two load-bearing pitfalls to know about:
+
+1. **Async-after-pop crashes**: if a method writes to `state` after an `await` that completes after the page popped, the notifier is already disposed and the assignment throws. Always guard with `if (!ref.mounted) return;` between `await` and `state = ...`.
+2. **`ref.keepAlive()` opt-out**: returns a `KeepAliveLink` that suspends auto-disposal until `link.close()` is called. Use for "cache N minutes" / "don't dispose mid-save" semantics. Don't reach for it as a default — defeating autoDispose by reflex causes silent memory growth.
+
+`autoDispose` providers depending on each other via `ref.watch` can create dispose-recreate cycles; prefer `ref.read` for cross-provider lookups inside autoDispose providers, or accept that the dependency keeps the upstream alive as long as the downstream lives.
+
+### Riverpod 3 auto-retry (load-bearing gotcha)
+
+Riverpod 3 enables **automatic exponential-backoff retry** by default on all async providers (`AsyncNotifierProvider`, `FutureProvider`, `StreamProvider`). When `build()` throws an `Exception` (not `Error`), Riverpod silently retries up to **10 times** with delays 200ms → 6.4s, totalling ~38s before giving up. Source: `riverpod/lib/src/core/provider_container.dart` `defaultRetry`.
+
+This is **not** a scaffold-level retry — it's framework default. It stacks on top of `DioClient.enableRetry()` (which does HTTP-level retry on timeout/connection errors). Worst case, a single logical failure can cause `(1 + dio.maxRetries) × (1 + 10)` HTTP requests over multiple minutes.
+
+Convention for this codebase:
+- **List / pagination / detail screens** with a manual "retry" button: disable per-provider with `retry: (_, _) => null`. Users get immediate error feedback.
+- **Long-lived global providers** (token restore, config fetch): keep the default — these benefit from transient-failure recovery.
+- **Never** rely on Riverpod retry as a substitute for proper error handling — it just delays the failure UI by 30+ seconds.
+
+When writing a new `AsyncNotifierProvider`, decide explicitly whether retry is desired and pass the `retry:` argument accordingly. Treating it as "don't think about it, defaults are fine" leads to confusing UX (long loading → eventual error).
+
 ## Linting notes
 
 `analysis_options.yaml` extends `very_good_analysis` but disables several rules that conflict with this codebase's style: `public_member_api_docs`, `lines_longer_than_80_chars`, `always_use_package_imports` (relative imports inside `lib/src/` are intentional), `sort_pub_dependencies` (deps are grouped semantically), and a few others. Don't re-enable these without discussion.

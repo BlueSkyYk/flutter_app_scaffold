@@ -1,6 +1,7 @@
 import 'package:flutter_app_scaffold/flutter_app_scaffold.dart';
 
 import '../features/auth/auth.dart';
+import '../features/feed/feed.dart';
 import '../features/home/home.dart';
 
 /// 全局路由 Provider。
@@ -13,6 +14,7 @@ final routerProvider = Provider<GoRouter>((ref) {
     routes: [
       GoRoute(path: '/login', builder: (_, _) => const LoginPage()),
       GoRoute(path: '/home', builder: (_, _) => const HomePage()),
+      GoRoute(path: '/feed', builder: (_, _) => const FeedPage()),
     ],
     // 路由守卫:未登录强制去 /login;已登录访问 /login 自动跳 /home。
     redirect: (context, state) {

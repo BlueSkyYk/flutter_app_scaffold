@@ -24,8 +24,8 @@ class LoginPage extends ConsumerStatefulWidget {
 class _LoginPageState extends ConsumerState<LoginPage>
     with PageLifecycleMixin<LoginPage> {
   final _formKey = GlobalKey<FormState>();
-  final _usernameCtrl = TextEditingController(text: 'demo');
-  final _passwordCtrl = TextEditingController(text: 'demo123');
+  final _usernameCtrl = TextEditingController(text: '19980465476');
+  final _passwordCtrl = TextEditingController(text: '123456');
   bool _obscure = true;
 
   @override
@@ -50,10 +50,7 @@ class _LoginPageState extends ConsumerState<LoginPage>
     FocusScope.of(context).unfocus();
     await ref
         .read(authControllerProvider.notifier)
-        .login(
-          username: _usernameCtrl.text.trim(),
-          password: _passwordCtrl.text,
-        );
+        .login(phone: _usernameCtrl.text.trim(), code: _passwordCtrl.text);
   }
 
   @override
@@ -100,11 +97,6 @@ class _LoginPageState extends ConsumerState<LoginPage>
                     style: Theme.of(context).textTheme.titleLarge,
                   ),
                   const SizedBox(height: 4),
-                  Text(
-                    '使用 demo / demo123 登录',
-                    textAlign: TextAlign.center,
-                    style: Theme.of(context).textTheme.bodySmall,
-                  ),
                   const SizedBox(height: 32),
                   TextFormField(
                     controller: _usernameCtrl,
@@ -126,8 +118,8 @@ class _LoginPageState extends ConsumerState<LoginPage>
                     textInputAction: TextInputAction.done,
                     onFieldSubmitted: (_) => _submit(),
                     decoration: InputDecoration(
-                      labelText: '密码',
-                      prefixIcon: const Icon(Icons.lock_outline),
+                      labelText: '验证码',
+                      prefixIcon: const Icon(Icons.sms_outlined),
                       border: const OutlineInputBorder(),
                       suffixIcon: IconButton(
                         icon: Icon(
@@ -139,7 +131,7 @@ class _LoginPageState extends ConsumerState<LoginPage>
                       ),
                     ),
                     validator: (v) =>
-                        (v == null || v.length < 6) ? '密码至少 6 位' : null,
+                        (v == null || v.length < 6) ? '验证码至少 6 位' : null,
                   ),
                   const SizedBox(height: 24),
                   FilledButton(
