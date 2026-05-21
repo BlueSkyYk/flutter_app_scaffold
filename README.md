@@ -231,6 +231,32 @@ client.enableAuth(
 > 业务负责持久化新 token：`refreshToken` 回调内必须先写入存储，再 `return newAccess`，
 > 这样下次 `tokenProvider()` 才能读到最新值。
 
+##### 单接口跳过鉴权 `Options().noAuth()`
+
+登录、验证码、注册、公开内容等接口**不应该**带当前用户 token。在调用点显式标记即可：
+
+```dart
+// 登录:不带 token
+await client.post(
+  '/auth/login',
+  data: {'phone': phone, 'code': code},
+  options: Options().noAuth(),
+);
+
+// 公开内容:理论上带不带都行,带上反而暴露用户信息
+await client.get('/public/banner', options: Options().noAuth());
+
+// 链式组合:不带 token + 不弹 toast/loading
+await client.post('/heartbeat', options: Options().noAuth().silent());
+```
+
+`noAuth()` 做两件事：
+
+1. **`onRequest` 不注入 Authorization header**
+2. **即使响应 401，也不触发 `refreshToken` / `onUnauthorized`**（避免 `/login` 返回 401「账号密码错」被错误识别成 session 过期）
+
+如果业务侧不想用扩展，可以裸写 `extra: {kAuthSkipKey: true}`，效果相同。但推荐 `Options().noAuth()` —— 类型安全、易读、跟 `silent()` / `ui(...)` 风格一致。
+
 #### 启用重试（针对网络层错误）
 
 ```dart

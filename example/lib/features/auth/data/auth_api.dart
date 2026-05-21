@@ -32,10 +32,14 @@ class AuthApi {
     required String phone,
     required String code,
   }) async {
-    AppLog.i('[auth-api] POST /auth/login (mock)');
+    AppLog.i('[auth-api] POST /user/login');
+    // 登录接口本身不需要(也不能)带旧 token —— 用 Options().noAuth() 跳过鉴权拦截器。
+    // 这样 onRequest 不注入 Authorization;即使返回 401("账号密码错")也不会触发
+    // refreshToken / onUnauthorized,避免和正常登录失败的语义混淆。
     final res = await _dio.post(
-      "/user/login",
-      data: {"phone": phone, "code": code},
+      '/user/login',
+      data: {'phone': phone, 'code': code},
+      options: Options().noAuth(),
     );
     return parseModel(response: res, parser: LoginResponseDto.fromJson);
   }

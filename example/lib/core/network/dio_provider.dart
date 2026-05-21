@@ -1,7 +1,7 @@
 import 'package:example/app/configs.dart';
 import 'package:flutter_app_scaffold/flutter_app_scaffold.dart';
 
-import '../storage/secure_storage_provider.dart';
+import '../../features/auth/auth.dart';
 import 'http_result.dart';
 
 /// 全局 [DioClient] Provider。
@@ -12,7 +12,9 @@ import 'http_result.dart';
 /// 推荐添加顺序:enableUiFeedback → enableAuth → enableRetry,
 /// 这样 UI 反馈在最外圈,看到的是鉴权刷新 / 重试之后的最终结果。
 final dioProvider = Provider<DioClient>((ref) {
-  final storage = ref.read(secureStorageProvider);
+  // 通过 TokenSource 接口拿 token —— 不知道、也不应该知道 token 存在哪、key 叫什么。
+  // 切换持久化方案(secureStorage → Hive)时,这里零改动;只改 features/auth/data/token_storage.dart。
+  final tokens = ref.read(tokenSourceProvider);
 
   final client = DioClient()
     // ① UI 反馈(loading / 错误 toast):需要业务工程实现 UiFeedback 接口,
@@ -43,10 +45,13 @@ final dioProvider = Provider<DioClient>((ref) {
     //   refreshToken 暂不接,401 时返回 onUnauthorized 让上层(controller / router)
     //   自行处理(例如清空登录态、跳登录页)。真实接刷新时取消下面 refreshToken 的注释。
     ..enableAuth(
-      tokenProvider: () => storage.read(key: 'access_token'),
+      tokenProvider: tokens.currentAccessToken,
       // refreshToken: () async {
-      //   final newToken = await ref.read(authApiProvider).refresh();
-      //   await storage.write(key: 'access_token', value: newToken);
+      //   final rt = await tokens.currentRefreshToken();
+      //   if (rt == null) return null;
+      //   final newToken = await ref.read(authApiProvider).refresh(rt);
+      //   // 业务侧负责把新 token 写回:让 AuthRepository 暴露一个
+      //   // updateAccessToken(newToken) 方法,这里调它。
       //   return newToken;
       // },
     )

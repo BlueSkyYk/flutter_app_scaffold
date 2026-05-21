@@ -5,6 +5,8 @@
 /// 想要让某个符号"对外可见",就在这里 export 一行。
 library;
 
+export 'data/token_storage.dart' show tokenSourceProvider;
 export 'domain/auth_user.dart';
+export 'domain/token_source.dart';
 export 'presentation/auth_controller.dart' show authControllerProvider;
 export 'presentation/login_page.dart' show LoginPage;

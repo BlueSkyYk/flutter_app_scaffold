@@ -64,6 +64,10 @@ class AuthInterceptor extends Interceptor {
     RequestOptions options,
     RequestInterceptorHandler handler,
   ) async {
+    // 显式 noAuth 的请求:不注入 token,直接放行。
+    if (options.extra[kAuthSkipKey] == true) {
+      return handler.next(options);
+    }
     final token = await tokenProvider();
     if (token != null && token.isNotEmpty) {
       options.headers[headerName] =
@@ -77,6 +81,11 @@ class AuthInterceptor extends Interceptor {
     DioException err,
     ErrorInterceptorHandler handler,
   ) async {
+    // 显式 noAuth 的请求即使 401 也不走刷新 / onUnauthorized
+    // (例如 /login 返回 401 表示"账号密码错",不是 session 失效)。
+    if (err.requestOptions.extra[kAuthSkipKey] == true) {
+      return handler.next(err);
+    }
     final isAuthError =
         shouldRefresh?.call(err) ?? err.response?.statusCode == 401;
     final alreadyRetried = err.requestOptions.extra[_retriedKey] == true;
@@ -123,5 +132,36 @@ class AuthInterceptor extends Interceptor {
     } finally {
       _refreshing = null;
     }
+  }
+}
+
+/// `Options.extra` 中存放"跳过鉴权"标记用的 key。
+///
+/// 业务侧推荐通过 [AuthOptionsX.noAuth] 设置,而不是裸写 extra map。
+const String kAuthSkipKey = '_flutter_app_scaffold_auth_skip';
+
+/// 给 [Options] 加一组类型安全的鉴权策略语法糖。
+extension AuthOptionsX on Options {
+  /// 跳过鉴权拦截器:本次请求不注入 token,即使返回 401 也不触发
+  /// `refreshToken` / `onUnauthorized`。
+  ///
+  /// 常用于:登录 / 注册 / 验证码 / 公开内容 / 其它不应携带当前用户 token 的接口。
+  ///
+  /// ```dart
+  /// await client.post(
+  ///   '/auth/login',
+  ///   data: {...},
+  ///   options: Options().noAuth(),
+  /// );
+  /// ```
+  ///
+  /// 可与其它扩展链式组合,例如静默后台请求且不带 token:
+  /// ```dart
+  /// await client.post('/heartbeat', options: Options().noAuth().silent());
+  /// ```
+  Options noAuth() {
+    return copyWith(
+      extra: {...?extra, kAuthSkipKey: true},
+    );
   }
 }
