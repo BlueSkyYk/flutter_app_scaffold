@@ -2,6 +2,43 @@
 
 Flutter 应用脚手架。一个包搞定新项目最常见的脏活：**启动初始化、网络、存储、路由、主题、错误兜底、页面生命周期**。
 
+## 给 AI Agent 的速查（Claude Code / Cursor）
+
+> 如果你（AI agent）正在一个**依赖本脚手架**的业务项目里改代码，先读完这一节再动手。
+> 本节是高密度索引；完整用法看本 README 后续章节，**工程不变量（改源码必读）看 §九**，Riverpod 深入可再看 `docs/riverpod-guide.md`。
+
+**入口与导入**
+
+- 业务侧只导一个 barrel：`import 'package:flutter_app_scaffold/flutter_app_scaffold.dart';`
+- **禁止**直接 `import 'package:dio/dio.dart'` / `flutter_riverpod` / `go_router` / `flutter_screenutil`——它们已被 re-export。
+
+**不可违反的契约**（违反多为「静默 bug」，详见 §九）
+
+- 启动只走 `AppBootstrap.run`；它内部已包 `ScreenUtilInit`，**不要**再手动包一层（嵌套会重复 LayoutBuilder 重建 + designSize 漂移）。
+- 路由用 `AppRouter.create`（自动挂 `appRouteObserver`）；手写 `GoRouter` 必须 `observers: [appRouteObserver]`，否则页面生命周期静默不触发。
+- 网络拦截器只用 `enableUiFeedback()` / `enableAuth()` / `enableRetry()` 加，推荐顺序：**UI → Auth → Retry**。改动 `AuthInterceptor` / `UiFeedbackInterceptor` 前先读 §九 的「网络层不变量」——单飞刷新、loading 计数标记、重试标记都是 load-bearing。
+- Repository 用 `safeRequest` 返回 `ApiResult<T>`；异常是 sealed `ApiException`（Network / HttpStatus / Business / Cancel / Parse），`switch` 穷尽。
+- Riverpod 3 默认对 async provider 自动重试 **10 次**（~38s）。列表/分页/详情 provider 必须 `retry: (_, _) => null`，见 §10。
+- autoDispose provider 里 `await` 之后写 `state` 前，必须 `if (!ref.mounted) return;`。
+
+**这些契约由测试钉死**：`test/network/`（拦截器）、`test/ui/`（生命周期）。不确定行为时，去 pub-cache 里读对应测试。
+
+### 让新项目里的 Claude 找到这份 README（桥）
+
+本脚手架通过 git / pub 依赖时，`README.md` 会落到消费方的 `~/.pub-cache` 里，但新项目的 Claude 默认不会去那里读。**只需把下面这段粘进每个新项目的 `CLAUDE.md` 顶部**——Claude 就会自动定位并读完这一份 README（用法 + 工程不变量都在里面）：
+
+````markdown
+## flutter_app_scaffold
+
+本项目通过 git/pub 依赖 `flutter_app_scaffold`。**改网络、存储、路由、启动、页面生命周期、Riverpod provider 相关代码前，先读它的 README**（pub-cache 路径带版本/hash，用 find 解析）：
+
+```bash
+find ~/.pub-cache -path '*flutter_app_scaffold*/README.md' 2>/dev/null | head -1
+```
+
+先读 README 顶部的「给 AI Agent 的速查」拿到铁律；要改拦截器 / 启动 / 页面生命周期源码时，务必再读 README §九「工程不变量」（违反多为静默 bug）。
+````
+
 ## 一、为什么是它
 
 一个新 Flutter 项目通常要重复做这些事：
@@ -753,4 +790,92 @@ lib/
 4. 路由集中放 `lib/router/`，每个 feature 暴露自己的 `RouteBase` 列表
 5. 页面按需选型：纯展示用 `ConsumerWidget`；需要本地 state + ref 用 `ConsumerStatefulWidget`；
    需要页面生命周期再加 `PageLifecycleMixin`（或单纯继承 `BasePage`）。需要保活的子组件包 `KeepAliveWrapper`。
+
+## 九、工程不变量与陷阱（改源码 / AI Agent 必读）
+
+> 这一节是"为什么这么写"以及"动哪里会悄悄坏掉"。**业务侧正常使用不需要读**；
+> 但只要改脚手架源码（尤其是拦截器、启动、页面生命周期），或让 AI agent 动这些地方，必读。
+> 所有不变量都有测试钉死，不确定时去 `test/network/`、`test/ui/` 读对应测试。
+
+### Barrel + re-export 契约
+
+`lib/flutter_app_scaffold.dart` 是**唯一**对外入口。它 re-export 了：
+
+- 全部 `src/` 公开 API；
+- 部分 `dio` 符号（`Dio` / `Options` / `Response` / `CancelToken` / `RequestOptions`）；
+- `flutter_riverpod`、`go_router`、`flutter_screenutil` 全量。
+
+**规则**：消费方**永远不要**直接 `import 'package:dio/dio.dart'` / `flutter_riverpod` / `go_router` / `flutter_screenutil`。在 `lib/src/` 下新增公开符号时，**必须**同步在 barrel 加一行 `export`，否则对消费方不可见。
+
+### 启动管线顺序（`AppBootstrap.run`）
+
+顺序是 load-bearing，定义在 `lib/src/bootstrap/app_bootstrap.dart`：
+
+1. `WidgetsFlutterBinding.ensureInitialized()`
+2. `AppConfig.bind(config)` —— 在此之前任何 `AppConfig.I` 读取会抛 `StateError`。
+3. 安装 `GlobalErrorHandler`（`FlutterError.onError` + `PlatformDispatcher.onError` + `runZonedGuarded`）。
+4. `PrefsStorage.init()`（`autoInitPrefs: false` 可跳过）。
+5. 顺序执行用户的 `AppInitializer`：`critical: true` 的失败会 rethrow 中断启动；非 critical 失败仅记日志吞掉。
+6. `runApp(...)`，用户 widget 被 `ScreenUtilInit(designSize: config.designSize, ...)` 包裹。
+
+**这是唯一的 ScreenUtilInit 点**——消费方**禁止**再包一层 `ScreenUtilInit`（嵌套会导致重复 LayoutBuilder 重建 + designSize 静默漂移）。
+
+整段被 `GlobalErrorHandler.run` 包住，启动期间的异步错误也会流向 reporter。
+
+### 单例约定
+
+`AppConfig` / `PrefsStorage` / `AppLog` 用 `.I` 访问器，启动时绑定一次、全局读取。测试间无自动重置，但每个单例都提供 `@visibleForTesting static void reset()`（`AppConfig.reset()` / `PrefsStorage.reset()`）用于显式 teardown；网络测试一般在 `setUpAll` 里 `AppConfig.bind(...)`。
+
+### 网络层不变量（最复杂、最易踩坑）
+
+`DioClient`（`lib/src/network/dio_client.dart`）两套 API：
+
+- `request/get/post/put/delete` —— 抛 `ApiException`（`api_exception.dart` 的 sealed 层级）。
+- `safeRequest` —— 返回 `ApiResult<T>`（success/failure），Repository 优先用这个，调用方 pattern-match 无需 try-catch。
+
+**`mapDioException` 是 `DioException → ApiException` 的唯一转换点。** 扩展网络层时，所有错误都要路由到它，这样调用方的 sealed `switch` 才能保持穷尽。关键细节：它**先检查 `e.error is ApiException` 并直通透传**——因为 `UiFeedbackInterceptor` 会把业务码错误以 `DioException(error: BusinessException, type: unknown)` 形式 reject；若不透传，业务码错误会被类型 switch 静默降级成 `NetworkException`。扩展异常映射时必须保留这个 unwrap。
+
+**拦截器只通过 `enableX` 方法加**（自动绑定同一个 `Dio` 实例，避免传错）。推荐加序：`enableUiFeedback()` → `enableAuth()` → `enableRetry()`。dio 按添加顺序 FIFO 跑 request 拦截器、同样顺序跑 response/error；UI 反馈在最外圈，能正确捕获最终结果（鉴权刷新成功视为成功，重试穷尽视为失败）。
+
+**`enableUiFeedback(UiFeedback)`** —— loading 计数器 + 错误 toast + 业务码检测：
+
+- 单请求覆盖：`Options().ui(loading:?, errorToast:?)` 或 `Options().silent()`，存在 `extra` 的 `kUiFeedbackOverrideKey` 下。
+- `_kCountedKey` / `_kToastedKey` 两个 extra 标记，防止 `onResponse` reject 级联到 `onError` 时的**重复减计数 / 重复 toast**。
+- **load-bearing 修复**：`onRequest` 会清掉 `_kCountedKey`。因为 `RetryInterceptor` 重试时复用**同一个** `RequestOptions` 重新 fetch，会再次进入本拦截器；不清掉的话，上一次失败留下的标记会让重试成功的 `onResponse` 跳过减计数 → loading 计数器永久多 +1、全屏遮罩再也关不掉。钉死在 `test/network/ui_feedback_and_retry_test.dart`。
+
+**`enableAuth(tokenProvider, refreshToken?, shouldRefresh?, onUnauthorized?)`** —— token 注入 + 401 刷新重试：
+
+- 并发 401 通过 `AuthInterceptor` 的 `_refreshing` future 字段**单飞合并**——N 个请求同时 401 只刷新 1 次，共用结果。
+- `_retriedKey` extra 标记防止"重发后仍 401"时**二次刷新**（防死循环）。
+- **load-bearing 修复**：当重发请求仍返回 401 时，重发的内层 fetch 会再次进入 `AuthInterceptor.onError`（此时 `_retriedKey=true`）；该重入**不能**调 `onUnauthorized`——外层 retry 的 catch 块负责那唯一一次调用。`!canRefresh` 分支在 `alreadyRetried` 时跳过 `onUnauthorized`，否则会**双触发**（双跳登录页 / 双清理）。钉死在 `test/network/auth_interceptor_test.dart`。
+- 单请求 opt-out：`Options().noAuth()`（或裸 `extra: {kAuthSkipKey: true}`）**同时**跳过 token 注入**和** 401→刷新/onUnauthorized 链——登录/注册/验证码这类"401 表示凭据错而非 session 过期"的接口必须用。
+
+手动 `client.addInterceptor(AuthInterceptor(..., dio: client.raw))` 仍支持但易错，优先用 `enableX`。扩展 `AuthInterceptor` 时务必保留单飞不变量（`_refreshing`）和重试标记语义，二者并发正确性 load-bearing。
+
+**`enableRetry(maxRetries, initialDelay)`** —— 仅对超时 / 连接错误做指数退避（`initialDelay * 2^(n-1)`），业务错误 / HTTP 错误不重试。`maxRetries=0` 即禁用。
+
+### 页面生命周期不变量（替代 GetX）
+
+`BasePage` / `BasePageState` + `PageLifecycleMixin`（`lib/src/ui/base/base_page.dart`）组合 `RouteAware`（经 `appRouteObserver`）与 `WidgetsBindingObserver`，暴露 `onPageShow / onPageHide / onAppForeground / onAppBackground` 四个钩子。
+
+**前提**：路由必须经 `AppRouter.create` 创建（自动挂 `appRouteObserver`）。消费方手写 `GoRouter` 时必须自行 `observers: [appRouteObserver]`，否则 `BasePage` 回调**静默不触发**。
+
+load-bearing 细节（改这类务必保留）：
+
+- `_isCurrent` / `_isAppForeground` 两个 flag 协调路由事件流与 App 前后台事件流，保证"被覆盖的页切前后台"不会**重复 fire** `onPageHide`。
+- `RouteObserver.subscribe` 内部会在注册时**立刻补发一次** `didPush`，所以初始路由（如 GoRouter 的 `initialLocation`）即使实际 push 发生在 `didChangeDependencies` 之前，也能收到 `onPageShow`。**不要**再手动用 `route.isCurrent` 补 fire——会让初始路由 `onPageShow` 双触发。
+- `dispose()` **不**回调 `onPageHide`（此时 `mounted=false`，碰 `setState` / `context` 会抛异常）；资源清理写在子类自己的 `dispose` 里。正常 pop 路径会经 `didPop` 在 `dispose` 之前 fire `onPageHide`。
+
+钉死在 `test/ui/page_lifecycle_test.dart`（初始路由单次 show、push/pop 协调、didPop 路径）。
+
+### 错误兜底是单 sink
+
+`GlobalErrorHandler` 是**唯一**安装 `FlutterError.onError` / `PlatformDispatcher.instance.onError` / `runZonedGuarded` 的地方。**不要**在别处再装这三个——reporter 契约假设只有一个汇。消费方在 boot 时注入自己的 `ErrorReporter`（如 Sentry / Crashlytics）。
+
+### Riverpod autoDispose + 自动重试
+
+两条最容易踩的（完整心智模型见 §10 / §11 与 `docs/riverpod-guide.md`）：
+
+- **async-after-pop 崩溃**：autoDispose provider 里 `await` 之后写 `state`，若期间页面已 pop，notifier 已 dispose，赋值会抛。`await` 与 `state = ...` 之间**必须** `if (!ref.mounted) return;`。
+- **Riverpod 3 默认自动重试**：async provider 的 `build()` 抛 `Exception` 时默认指数退避重试 **10 次**（200ms→6.4s，~38s）。列表 / 分页 / 详情这类"有手动重试按钮"的 provider 必须 `retry: (_, _) => null`；token restore / 配置拉取等长生命周期 provider 可保留默认。它会和 `DioClient.enableRetry()` **叠加**（最坏 `(1+dio重试)×(1+10)` 次请求），两层都开默认值时一定要有意识地评估 UI 延迟。
 
