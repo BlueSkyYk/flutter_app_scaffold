@@ -39,6 +39,12 @@ class UiFeedbackInterceptor extends Interceptor {
     RequestOptions options,
     RequestInterceptorHandler handler,
   ) {
+    // RetryInterceptor 重试时复用同一个 RequestOptions 重新 fetch，
+    // 会再次从 request 链顶端（含本拦截器）进入。清掉上一次 fetch 留下的
+    // 「已计数」标记，保证每次 fetch 的计数器加/减自平衡，否则上一次
+    // 失败留下的标记会让重试成功的 onResponse 跳过减计数 → loading 卡死。
+    options.extra.remove(_kCountedKey);
+
     if (_showLoading(options)) {
       _loadingCount++;
       if (_loadingCount == 1) config.onLoadingStart?.call();

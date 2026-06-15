@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'kv_storage.dart';
@@ -22,6 +23,10 @@ class PrefsStorage implements KvStorage {
     }
     return ins;
   }
+
+  /// 清除已初始化的实例。仅用于测试隔离，正式代码不要调用。
+  @visibleForTesting
+  static void reset() => _instance = null;
 
   @override
   Future<String?> getString(String key) async => _prefs.getString(key);

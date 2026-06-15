@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/widgets.dart';
+import 'package:flutter_screenutil/flutter_screenutil.dart';
 
 import '../config/app_config.dart';
 import '../error/error_reporter.dart';
@@ -61,7 +62,15 @@ class AppBootstrap {
         }
       }
 
-      runApp(app());
+      runApp(
+        ScreenUtilInit(
+          designSize: config.designSize,
+          minTextAdapt: config.minTextAdapt,
+          splitScreenMode: config.splitScreenMode,
+          builder: (_, child) => child!,
+          child: app(),
+        ),
+      );
     });
   }
 }

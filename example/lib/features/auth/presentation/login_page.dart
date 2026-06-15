@@ -73,31 +73,34 @@ class _LoginPageState extends ConsumerState<LoginPage>
 
     final isLoading = auth.isLoading;
 
+    // 屏幕适配示例:`.w` / `.h` / `.sp` 来自 flutter_screenutil(scaffold 已内置)。
+    // 数值即设计稿(默认 375×812)上的逻辑像素,运行时按设备宽度等比缩放。
     return Scaffold(
       body: SafeArea(
         child: Center(
           child: SingleChildScrollView(
-            padding: const EdgeInsets.symmetric(horizontal: 24),
+            padding: EdgeInsets.symmetric(horizontal: 24.w),
             child: Form(
               key: _formKey,
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  const SizedBox(height: 40),
+                  SizedBox(height: 40.h),
                   Icon(
                     Icons.flutter_dash,
-                    size: 80,
+                    size: 80.r,
                     color: Theme.of(context).colorScheme.primary,
                   ),
-                  const SizedBox(height: 12),
+                  SizedBox(height: 12.h),
                   Text(
                     '欢迎回来',
                     textAlign: TextAlign.center,
-                    style: Theme.of(context).textTheme.titleLarge,
+                    style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                      fontSize: 22.sp,
+                    ),
                   ),
-                  const SizedBox(height: 4),
-                  const SizedBox(height: 32),
+                  SizedBox(height: 36.h),
                   TextFormField(
                     controller: _usernameCtrl,
                     enabled: !isLoading,
@@ -110,7 +113,7 @@ class _LoginPageState extends ConsumerState<LoginPage>
                     validator: (v) =>
                         (v == null || v.trim().isEmpty) ? '请输入账号' : null,
                   ),
-                  const SizedBox(height: 16),
+                  SizedBox(height: 16.h),
                   TextFormField(
                     controller: _passwordCtrl,
                     enabled: !isLoading,
@@ -133,24 +136,24 @@ class _LoginPageState extends ConsumerState<LoginPage>
                     validator: (v) =>
                         (v == null || v.length < 6) ? '验证码至少 6 位' : null,
                   ),
-                  const SizedBox(height: 24),
+                  SizedBox(height: 24.h),
                   FilledButton(
                     onPressed: isLoading ? null : _submit,
                     style: FilledButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(vertical: 14),
+                      padding: EdgeInsets.symmetric(vertical: 14.h),
                     ),
                     child: isLoading
-                        ? const SizedBox(
-                            height: 20,
-                            width: 20,
-                            child: CircularProgressIndicator(
+                        ? SizedBox(
+                            height: 20.r,
+                            width: 20.r,
+                            child: const CircularProgressIndicator(
                               strokeWidth: 2,
                               color: Colors.white,
                             ),
                           )
-                        : const Text('登录'),
+                        : Text('登录', style: TextStyle(fontSize: 16.sp)),
                   ),
-                  const SizedBox(height: 12),
+                  SizedBox(height: 12.h),
                   TextButton(
                     onPressed: isLoading ? null : () {},
                     child: const Text('忘记密码？'),

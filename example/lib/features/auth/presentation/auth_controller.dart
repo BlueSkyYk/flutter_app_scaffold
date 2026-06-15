@@ -31,6 +31,12 @@ class AuthController extends AsyncNotifier<AuthUser?> {
   }
 }
 
+/// 不带 `retry:` —— **刻意**保留 Riverpod 3 默认重试。
+///
+/// 与 FeedController 关闭重试相反:这是「长生命周期、能自然恢复」的 provider
+/// (本地 token restore)。`build()` 读本地存储,偶发失败时默认重试能让用户无感恢复,
+/// 没有"用户手动点重试"的诉求,所以默认策略正合适。
+/// 详见 README §10「何时保留 / 何时关闭 Riverpod 自动重试」。
 final authControllerProvider = AsyncNotifierProvider<AuthController, AuthUser?>(
   AuthController.new,
 );

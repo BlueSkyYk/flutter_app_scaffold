@@ -23,6 +23,7 @@ Flutter 应用脚手架。一个包搞定新项目最常见的脏活：**启动�
 | 网络 | [`dio`](https://pub.dev/packages/dio) |
 | 存储 | `shared_preferences` |
 | 日志 | `logger` |
+| 屏幕适配 | [`flutter_screenutil`](https://pub.dev/packages/flutter_screenutil) |
 | Lint | `very_good_analysis` |
 
 > **GetX 不再使用**。页面生命周期通过 `RouteObserver` + `WidgetsBindingObserver` 实现，原生方案，包体更小。
@@ -138,6 +139,7 @@ const config = AppConfig(
   apiBaseUrl: 'https://api.example.com',
   connectTimeout: Duration(seconds: 8),
   enableNetworkLog: false,
+  designSize: Size(375, 812), // 屏幕适配设计稿尺寸,见第 13 节
   extra: {'cdnBase': 'https://cdn.example.com'},
 );
 
@@ -458,7 +460,7 @@ MaterialApp(
 );
 ```
 
-### 0. Riverpod 完整指南
+### Riverpod 完整指南
 
 📖 **完整的 Riverpod 实战手册见 [docs/riverpod-guide.md](docs/riverpod-guide.md)**，覆盖心智模型、Provider 选型、`autoDispose` 生命周期、`AsyncValue` 三态、自动重试陷阱、跨页面联动、错误处理分层、测试与调试。下面 §9-§11 是几个最常用的快查；深入用法请直接读完整指南。
 
@@ -674,6 +676,47 @@ AppBootstrap.run(
   app: ...,
 );
 ```
+
+### 13. 屏幕适配
+
+脚手架已内置 [`flutter_screenutil`](https://pub.dev/packages/flutter_screenutil),`AppBootstrap.run` 会自动用 `ScreenUtilInit` 包住 `runApp`,业务侧**无需任何包裹代码**就能直接用 `.w` / `.h` / `.sp` / `.r` 后缀:
+
+```dart
+Container(
+  width: 200.w,            // 设计稿 200px → 按设备宽度等比缩放
+  height: 80.h,            // 设计稿 80px  → 按设备高度等比缩放
+  padding: EdgeInsets.symmetric(horizontal: 16.w, vertical: 12.h),
+  child: Text('hello', style: TextStyle(fontSize: 14.sp)),
+);
+
+SizedBox(width: 24.r, height: 24.r); // .r 取宽高较小者,适合圆角 / 图标
+```
+
+#### 配置设计稿尺寸
+
+通过 `AppConfig` 一次性配置:
+
+```dart
+const AppConfig(
+  env: AppEnv.dev,
+  apiBaseUrl: 'https://api.example.com',
+  // 设计稿尺寸,默认 375×812(iPhone X / 13 mini)。
+  // 改成你团队设计稿的实际尺寸,所有 .w/.h 即基于此计算。
+  designSize: Size(390, 844),
+  // 字号在横屏 / 平板上是否仍取较小边缩放,默认 true(避免字过大)。
+  minTextAdapt: true,
+  // 是否分屏模式,默认 false。
+  splitScreenMode: false,
+);
+```
+
+#### 注意
+
+1. **导入只走脚手架 barrel**:`flutter_screenutil` 已被 `flutter_app_scaffold.dart` re-export,业务侧不要直接 `import 'package:flutter_screenutil/...'`。
+2. **不要手动包 `ScreenUtilInit`**:`AppBootstrap` 内部已经包过一层。再包会得到嵌套 LayoutBuilder,白嫖性能;且若 `designSize` 不一致还会出现尺寸跳变。
+3. **常量场景慎用**:`.w/.h` 不是 `const`,所以 `EdgeInsets.symmetric(horizontal: 16.w)` 不能再加 `const`。如果旧代码到处是 `const EdgeInsets`,改造时要去掉 `const`。
+4. **字号系统设置**:`flutter_screenutil` 不会替你裁剪系统级字号放大。若布局对超大字号敏感,业务侧自行在根 `MaterialApp.builder` 里 clamp `MediaQuery.textScaler`。
+5. **平板 / 桌面端**:`flutter_screenutil` 适合手机端等比缩放;真正的多端响应式建议在外层叠加 `LayoutBuilder` + 断点判断,不要让 `.w` 在大屏上把按钮拉到几百像素宽。
 
 ## 六、目录结构
 

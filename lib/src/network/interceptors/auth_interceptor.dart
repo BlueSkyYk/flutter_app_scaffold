@@ -93,7 +93,9 @@ class AuthInterceptor extends Interceptor {
         isAuthError && refreshToken != null && dio != null && !alreadyRetried;
 
     if (!canRefresh) {
-      if (isAuthError) await onUnauthorized?.call();
+      // alreadyRetried=true 表示这是「重发后仍失败」回流的 onError：外层 retry
+      // 的 catch 块会负责调 onUnauthorized，这里不能再调一次（否则双触发）。
+      if (isAuthError && !alreadyRetried) await onUnauthorized?.call();
       return handler.next(err);
     }
 

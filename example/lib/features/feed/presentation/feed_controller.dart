@@ -120,8 +120,5 @@ class FeedController extends AsyncNotifier<FeedState> {
 final feedControllerProvider =
     AsyncNotifierProvider.autoDispose<FeedController, FeedState>(
       FeedController.new,
-      retry: (retryCount, error) {
-        AppLog.d("业务重试");
-        return null;
-      },
+      retry: (_, _) => null,
     );

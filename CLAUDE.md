@@ -47,9 +47,9 @@ cd example && flutter pub get && flutter run
 `lib/flutter_app_scaffold.dart` is the **only** public entry point. It re-exports:
 - All `src/` public APIs.
 - Selected `dio` symbols (`Dio`, `Options`, `Response`, `CancelToken`, `RequestOptions`).
-- All of `flutter_riverpod` and `go_router`.
+- All of `flutter_riverpod`, `go_router`, and `flutter_screenutil`.
 
-Consumers should never import `package:dio/dio.dart`, `flutter_riverpod`, or `go_router` directly. When adding a new public symbol under `lib/src/`, also add an export line in this file — otherwise it's invisible to consumers.
+Consumers should never import `package:dio/dio.dart`, `flutter_riverpod`, `go_router`, or `flutter_screenutil` directly. When adding a new public symbol under `lib/src/`, also add an export line in this file — otherwise it's invisible to consumers.
 
 ### Startup pipeline (`AppBootstrap.run`)
 
@@ -60,13 +60,13 @@ Defined in `lib/src/bootstrap/app_bootstrap.dart`. Order matters and is load-bea
 3. Install `GlobalErrorHandler` (FlutterError + PlatformDispatcher + runZonedGuarded).
 4. `PrefsStorage.init()` (skippable via `autoInitPrefs: false`).
 5. Run user `AppInitializer`s sequentially. A failure in a `critical: true` initializer rethrows and aborts startup; non-critical failures are logged and swallowed.
-6. `runApp(...)` inside the guarded zone.
+6. `runApp(...)` inside the guarded zone, with the user widget wrapped in `ScreenUtilInit(designSize: config.designSize, ...)`. This is the single ScreenUtil init point — consumers must NOT add their own `ScreenUtilInit` (nested init causes redundant LayoutBuilder rebuilds and silent designSize drift).
 
 The whole call is wrapped in `GlobalErrorHandler.run`, so async errors during boot also flow to the reporter.
 
 ### Singleton conventions
 
-`AppConfig`, `PrefsStorage`, `AppLog` use a `.I` (instance) accessor. They are bound once at startup and read everywhere. Tests that touch these need to bind/configure them in `setUp` — there is no automatic reset between tests yet.
+`AppConfig`, `PrefsStorage`, `AppLog` use a `.I` (instance) accessor. They are bound once at startup and read everywhere. Tests that touch these need to bind/configure them in `setUp` — there is no automatic reset between tests, but each singleton exposes a `@visibleForTesting static void reset()` (`AppConfig.reset()` / `PrefsStorage.reset()`) for explicit teardown. Network tests typically just `AppConfig.bind(...)` in `setUpAll`.
 
 ### Dependency boundary
 
@@ -83,8 +83,8 @@ The scaffold deliberately excludes plugins that require project-level native con
 
 `enableNetworkLog` in `AppConfig` toggles the built-in `AppLogInterceptor`. Other interceptors are opt-in via convenience methods on `DioClient` that auto-bind to the same `Dio` instance:
 
-- `client.enableUiFeedback(UiFeedback)` — loading-counter + error-toast + business-code detection. Per-request override via `Options().ui(loading:?, errorToast:?)` or `Options().silent()`, stored under `kUiFeedbackOverrideKey` in `extra`. The interceptor uses `_kCountedKey` / `_kToastedKey` extra flags to prevent double-decrement / double-toast when an `onResponse` rejection cascades to `onError`.
-- `client.enableAuth(tokenProvider, refreshToken?, shouldRefresh?, onUnauthorized?)` — token injection + 401 refresh-and-retry. Concurrent 401s share a single refresh via the `_refreshing` future field on `AuthInterceptor`. The `_retriedKey` extra marker prevents re-refresh after a retried request still returns 401 (avoids infinite loops). Per-request opt-out: `Options().noAuth()` (or raw `extra: {kAuthSkipKey: true}`) skips token injection AND suppresses the 401 → refresh / onUnauthorized chain — required for endpoints like `/login` whose 401 means "wrong credentials" rather than "session expired".
+- `client.enableUiFeedback(UiFeedback)` — loading-counter + error-toast + business-code detection. Per-request override via `Options().ui(loading:?, errorToast:?)` or `Options().silent()`, stored under `kUiFeedbackOverrideKey` in `extra`. The interceptor uses `_kCountedKey` / `_kToastedKey` extra flags to prevent double-decrement / double-toast when an `onResponse` rejection cascades to `onError`. **`onRequest` clears `_kCountedKey`** so that when `RetryInterceptor` reuses the same `RequestOptions` for a new fetch, each fetch's counter increment/decrement stays balanced — without this, a failed-then-retried request leaks +1 on the loading counter and the global mask never hides (pinned by `test/network/ui_feedback_and_retry_test.dart`).
+- `client.enableAuth(tokenProvider, refreshToken?, shouldRefresh?, onUnauthorized?)` — token injection + 401 refresh-and-retry. Concurrent 401s share a single refresh via the `_refreshing` future field on `AuthInterceptor`. The `_retriedKey` extra marker prevents re-refresh after a retried request still returns 401 (avoids infinite loops). Per-request opt-out: `Options().noAuth()` (or raw `extra: {kAuthSkipKey: true}`) skips token injection AND suppresses the 401 → refresh / onUnauthorized chain — required for endpoints like `/login` whose 401 means "wrong credentials" rather than "session expired". When a retried request still returns 401, the retry's inner `onError` re-enters `AuthInterceptor` with `_retriedKey=true`; that re-entry must **not** call `onUnauthorized` — the outer retry's catch block owns that single call. Skipping `onUnauthorized` when `alreadyRetried` prevents a double-call (pinned by `test/network/auth_interceptor_test.dart`).
 - `client.enableRetry(maxRetries, initialDelay)` — exponential-backoff retry for timeout / connection errors only.
 
 **Recommended add-order**: `enableUiFeedback()` → `enableAuth()` → `enableRetry()`. UI feedback sits on the outermost layer of the chain so it sees final outcomes (auth refresh success treated as success; retry exhaustion treated as failure).

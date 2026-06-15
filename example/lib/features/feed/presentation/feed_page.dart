@@ -1,4 +1,3 @@
-import 'package:example/features/auth/auth.dart';
 import 'package:flutter_app_scaffold/flutter_app_scaffold.dart';
 import 'package:flutter/material.dart';
 

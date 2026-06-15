@@ -3,7 +3,6 @@ import 'package:flutter_app_scaffold/flutter_app_scaffold.dart';
 
 import '../domain/feed_item.dart';
 import '../domain/feed_repository.dart';
-import 'dto/feed_item_dto.dart';
 import 'feed_api.dart';
 
 /// [FeedRepository] 的实际实现(data 层)。
