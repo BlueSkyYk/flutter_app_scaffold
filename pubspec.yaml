@@ -1,6 +1,6 @@
 name: flutter_app_scaffold
-description: "Flutter app scaffold: bootstrap, networking, storage, routing, theming, error handling, and page lifecycle in one package."
-version: 0.3.0
+description: "Flutter app scaffold: bootstrap, networking, storage, routing, error handling, and page lifecycle in one package."
+version: 0.4.0
 repository: https://github.com/BlueSkyYk/flutter_app_scaffold
 issue_tracker: https://github.com/BlueSkyYk/flutter_app_scaffold/issues
 
@@ -10,8 +10,6 @@ environment:
 
 dependencies:
   flutter:
-    sdk: flutter
-  flutter_localizations:
     sdk: flutter
 
   # 状态管理

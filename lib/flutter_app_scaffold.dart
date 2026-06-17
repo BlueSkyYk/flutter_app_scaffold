@@ -7,7 +7,6 @@
 /// - 存储（KvStorage / PrefsStorage）
 /// - 网络（DioClient / ApiResult / ApiException / 拦截器）
 /// - 路由（AppRouter / appRouteObserver）
-/// - 主题（AppTheme / AppColors / AppTextStyles）
 /// - 通用 UI（LoadingView / EmptyView / ErrorView / AsyncValueView / KeepAliveWrapper）
 /// - 页面基类（BasePage / BasePageState）
 /// - 错误兜底（GlobalErrorHandler / ErrorReporter）
@@ -58,9 +57,6 @@ export 'src/storage/prefs_storage.dart';
 
 // UI
 export 'src/ui/base/base_page.dart';
-export 'src/ui/theme/app_colors.dart';
-export 'src/ui/theme/app_text_styles.dart';
-export 'src/ui/theme/app_theme.dart';
 export 'src/ui/widgets/async_value_view.dart';
 export 'src/ui/widgets/empty_view.dart';
 export 'src/ui/widgets/error_view.dart';

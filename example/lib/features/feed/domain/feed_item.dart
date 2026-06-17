@@ -1,9 +1,10 @@
-import '../data/dto/feed_item_dto.dart';
-
 /// 动态条目(domain 实体)。
 ///
 /// 纯 Dart 类、不依赖 Flutter / Dio / Riverpod —— domain 层硬约束:
 /// 业务对象应该可以在不启动 Flutter 引擎的前提下被单元测试实例化。
+///
+/// **DTO→Entity 转换不放这里**(避免 domain 反向依赖 data/dto),
+/// 由 Repository 实现层负责,见 `data/feed_repository_impl.dart`。
 class FeedItem {
   FeedItem({
     int? id,
@@ -54,23 +55,6 @@ class FeedItem {
     _commentCount = json['commentCount'] ?? 0;
     _liked = json['liked'] ?? false;
     _createdAt = json['createdAt'];
-  }
-
-  FeedItem.fromDto(FeedItemDto dto) {
-    _id = dto.id;
-    _userId = dto.userId;
-    _userNickname = dto.userNickname;
-    _userAvatar = dto.userAvatar;
-    _content = dto.content;
-    _contentType = dto.contentType;
-    _imageUrls = dto.imageUrls;
-    _videoUrl = dto.videoUrl;
-    _tags = dto.tags;
-    _visible = dto.visible;
-    _likeCount = dto.likeCount;
-    _commentCount = dto.commentCount;
-    _liked = dto.liked;
-    _createdAt = dto.createdAt;
   }
 
   int? _id;

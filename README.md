@@ -1,6 +1,6 @@
 # flutter_app_scaffold
 
-Flutter 应用脚手架。一个包搞定新项目最常见的脏活：**启动初始化、网络、存储、路由、主题、错误兜底、页面生命周期**。
+Flutter 应用脚手架。一个包搞定新项目最常见的脏活：**启动初始化、网络、存储、路由、错误兜底、页面生命周期**。
 
 ## 给 AI Agent 的速查（Claude Code / Cursor）
 
@@ -18,7 +18,7 @@ Flutter 应用脚手架。一个包搞定新项目最常见的脏活：**启动�
 - 路由用 `AppRouter.create`（自动挂 `appRouteObserver`）；手写 `GoRouter` 必须 `observers: [appRouteObserver]`，否则页面生命周期静默不触发。
 - 网络拦截器只用 `enableUiFeedback()` / `enableAuth()` / `enableRetry()` 加，推荐顺序：**UI → Auth → Retry**。改动 `AuthInterceptor` / `UiFeedbackInterceptor` 前先读 §九 的「网络层不变量」——单飞刷新、loading 计数标记、重试标记都是 load-bearing。
 - Repository 用 `safeRequest` 返回 `ApiResult<T>`；异常是 sealed `ApiException`（Network / HttpStatus / Business / Cancel / Parse），`switch` 穷尽。
-- Riverpod 3 默认对 async provider 自动重试 **10 次**（~38s）。列表/分页/详情 provider 必须 `retry: (_, _) => null`，见 §10。
+- Riverpod 3 默认对 async provider 自动重试 **10 次**（~38s）。列表/分页/详情 provider 必须 `retry: (_, _) => null`，见 §9。
 - autoDispose provider 里 `await` 之后写 `state` 前，必须 `if (!ref.mounted) return;`。
 
 **这些契约由测试钉死**：`test/network/`（拦截器）、`test/ui/`（生命周期）。不确定行为时，去 pub-cache 里读对应测试。
@@ -46,7 +46,7 @@ find ~/.pub-cache -path '*flutter_app_scaffold*/README.md' 2>/dev/null | head -1
 - 异步初始化要按顺序跑（日志、配置、存储、网络…）
 - dio 要装拦截器（鉴权、日志、重试），异常要统一
 - 路由要支持 deeplink、有 RouteObserver 给页面派发生命周期
-- 状态管理 / 主题 / loading-empty-error 三态展示
+- 状态管理 / loading-empty-error 三态展示
 - 全局未捕获异常要兜底 + 上报
 
 `flutter_app_scaffold` 把这些工程化模板抽成单包，业务侧 `pubspec` 加一行即可。
@@ -130,8 +130,6 @@ class MyApp extends StatelessWidget {
       ],
     );
     return MaterialApp.router(
-      theme: AppTheme.light(),
-      darkTheme: AppTheme.dark(),
       routerConfig: router,
     );
   }
@@ -176,7 +174,7 @@ const config = AppConfig(
   apiBaseUrl: 'https://api.example.com',
   connectTimeout: Duration(seconds: 8),
   enableNetworkLog: false,
-  designSize: Size(375, 812), // 屏幕适配设计稿尺寸,见第 13 节
+  designSize: Size(375, 812), // 屏幕适配设计稿尺寸,见第 12 节
   extra: {'cdnBase': 'https://cdn.example.com'},
 );
 
@@ -486,22 +484,11 @@ class _LoginPageState extends ConsumerState<LoginPage>
 `dispose` 阶段不会再回调 `onPageHide`——此时 `mounted=false`，触碰 `setState` / `context`
 会抛错。资源清理请在子类的 `dispose` 中处理。
 
-### 8. 主题
-
-```dart
-MaterialApp(
-  theme: AppTheme.light(
-    colors: const AppColors(primary: Color(0xFF1677FF)),
-  ),
-  darkTheme: AppTheme.dark(),
-);
-```
-
 ### Riverpod 完整指南
 
-📖 **完整的 Riverpod 实战手册见 [docs/riverpod-guide.md](docs/riverpod-guide.md)**，覆盖心智模型、Provider 选型、`autoDispose` 生命周期、`AsyncValue` 三态、自动重试陷阱、跨页面联动、错误处理分层、测试与调试。下面 §9-§11 是几个最常用的快查；深入用法请直接读完整指南。
+📖 **完整的 Riverpod 实战手册见 [docs/riverpod-guide.md](docs/riverpod-guide.md)**，覆盖心智模型、Provider 选型、`autoDispose` 生命周期、`AsyncValue` 三态、自动重试陷阱、跨页面联动、错误处理分层、测试与调试。下面 §8-§10 是几个最常用的快查；深入用法请直接读完整指南。
 
-### 9. AsyncValue 三态视图
+### 8. AsyncValue 三态视图
 
 配合 Riverpod 的 `AsyncValue` 直接渲染 loading / data / error / empty：
 
@@ -524,7 +511,7 @@ class UserListPage extends ConsumerWidget {
 }
 ```
 
-### 10. AsyncNotifier 自动重试（Riverpod 3 默认行为）
+### 9. AsyncNotifier 自动重试（Riverpod 3 默认行为）
 
 > ⚠️ **必读陷阱**：Riverpod 3 给所有 `AsyncNotifier` / `FutureProvider` / `StreamProvider` **默认开启了指数退避自动重试**：
 
@@ -570,7 +557,7 @@ retry: (retryCount, error) {
 
 两层独立、**会叠加**：dio 层重试针对 HTTP 超时 / 连接错（默认 2 次），Riverpod 层重试针对 `build()` 抛出的任何 `Exception`（默认 10 次）。最坏情况下一次"逻辑失败"会触发 `(1 + dio重试) × (1 + riverpod重试) = 33` 次实际 HTTP，跨度可达数分钟。**两层都开默认值时一定要有意识地评估 UI 反馈延迟。**
 
-### 11. `autoDispose` 生命周期
+### 10. `autoDispose` 生命周期
 
 `autoDispose` 是 Riverpod 控制 Provider 生命周期的修饰符。一句话:**没人监听就销毁,有人监听就保活**。
 
@@ -594,7 +581,7 @@ retry: (retryCount, error) {
 | 页面专属数据（列表 / 详情 / 搜索结果 / 表单草稿） | ✅ |
 | 大对象、占内存的数据（图片缓存、长列表） | ✅ |
 | 带订阅的资源（WebSocket / Timer / Stream） | ✅，配合 `ref.onDispose` 关流 |
-| 全局长生命周期状态（登录态、当前用户、主题） | ❌ |
+| 全局长生命周期状态（登录态、当前用户） | ❌ |
 | 单例服务（`DioClient` / `FlutterSecureStorage`） | ❌ |
 
 经验法则：**"路由全部 pop 后这个状态还有意义吗？"** —— 没有就 autoDispose。
@@ -694,7 +681,7 @@ ProviderScope(observers: [_DebugObserver()], child: ...);
 
 DevTools 的 Riverpod 面板可以实时看每个 provider 的状态、监听者数量、是否 autoDispose。
 
-### 12. 错误兜底
+### 11. 错误兜底
 
 `AppBootstrap.run` 已自动安装。接入上报：
 
@@ -714,7 +701,7 @@ AppBootstrap.run(
 );
 ```
 
-### 13. 屏幕适配
+### 12. 屏幕适配
 
 脚手架已内置 [`flutter_screenutil`](https://pub.dev/packages/flutter_screenutil),`AppBootstrap.run` 会自动用 `ScreenUtilInit` 包住 `runApp`,业务侧**无需任何包裹代码**就能直接用 `.w` / `.h` / `.sp` / `.r` 后缀:
 
@@ -772,7 +759,6 @@ lib/
     ├── storage/                      # KvStorage / PrefsStorage
     └── ui/
         ├── base/                     # BasePage / BasePageState / PageLifecycleMixin
-        ├── theme/                    # AppTheme / Colors / TextStyles
         └── widgets/                  # Loading/Empty/Error/AsyncValueView/KeepAlive
 ```
 
@@ -790,6 +776,26 @@ lib/
 4. 路由集中放 `lib/router/`，每个 feature 暴露自己的 `RouteBase` 列表
 5. 页面按需选型：纯展示用 `ConsumerWidget`；需要本地 state + ref 用 `ConsumerStatefulWidget`；
    需要页面生命周期再加 `PageLifecycleMixin`（或单纯继承 `BasePage`）。需要保活的子组件包 `KeepAliveWrapper`。
+
+#### feature 分层：domain 不依赖 data
+
+每个 feature 切 `data / domain / presentation` 三层，依赖方向**只能从外向内**：
+
+- `domain`：纯 Dart 实体 + Repository 接口，**不依赖** Flutter / Dio / Riverpod，更**不 import `data` 层的 DTO**。可以在不启动 Flutter 引擎的前提下被单元测试实例化。
+- `data`：DTO、API 客户端、Repository 实现。**DTO→Entity 转换写在这里**（Repository 实现内的私有函数），而不是在 domain 实体上写 `fromDto`——否则 domain 会反向 `import data/dto/...`，分层就失效了。
+- `presentation`：Controller + UI，依赖 `domain` 接口，拿不到 Repository 实现类（Provider 的类型暴露成 domain 接口，方便测试时 `overrideWith` 注入假实现）。
+
+> 反例：`domain/auth_user.dart` 上写 `AuthUser.fromDto(LoginResponseDto)` 会迫使它
+> `import '../data/dto/login_response_dto.dart'`——这条 import 就是 domain→data 的反向依赖。
+> 正确写法见 example 的 `auth_repository_impl.dart` / `feed_repository_impl.dart`：转换是 data 层私有函数。
+
+#### import：barrel 用在边界，不要每层全量 re-export
+
+- **脚手架 barrel**（`flutter_app_scaffold.dart`）是库的公共 API，消费方只 import 这一个文件——**必须**。
+- **feature 门面**（如 `features/auth/auth.dart`）：当 feature 要被路由或**其它 feature** 消费时，在 feature 根放一个**只 `show` 对外符号**（页面入口、provider、领域模型）的门面文件，把 DTO / repo 实现 / api client 藏在内部。这是**模块边界**，跨域消费者只 import 这个门面，碰不到实现细节。
+- **不要**给 `data / domain / presentation` 每层各建一个全量 `re-export` 的 barrel：IDE 自动补全已经解决了「路径长」的问题，全量 barrel 只会腐蚀分层、放大循环依赖风险、让 `unused_import` 更吵。feature **内部**直接用相对路径 import 即可。
+
+一句话：**砍掉「每个目录一个全量 barrel」，保留「feature 边界一个精选 `show` 门面」**。
 
 ## 九、工程不变量与陷阱（改源码 / AI Agent 必读）
 
@@ -874,7 +880,7 @@ load-bearing 细节（改这类务必保留）：
 
 ### Riverpod autoDispose + 自动重试
 
-两条最容易踩的（完整心智模型见 §10 / §11 与 `docs/riverpod-guide.md`）：
+两条最容易踩的（完整心智模型见 §9 / §10 与 `docs/riverpod-guide.md`）：
 
 - **async-after-pop 崩溃**：autoDispose provider 里 `await` 之后写 `state`，若期间页面已 pop，notifier 已 dispose，赋值会抛。`await` 与 `state = ...` 之间**必须** `if (!ref.mounted) return;`。
 - **Riverpod 3 默认自动重试**：async provider 的 `build()` 抛 `Exception` 时默认指数退避重试 **10 次**（200ms→6.4s，~38s）。列表 / 分页 / 详情这类"有手动重试按钮"的 provider 必须 `retry: (_, _) => null`；token restore / 配置拉取等长生命周期 provider 可保留默认。它会和 `DioClient.enableRetry()` **叠加**（最坏 `(1+dio重试)×(1+10)` 次请求），两层都开默认值时一定要有意识地评估 UI 延迟。

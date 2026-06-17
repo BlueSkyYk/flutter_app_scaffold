@@ -1,24 +1,17 @@
-import 'package:example/features/auth/data/dto/login_response_dto.dart';
-
 /// 登录后的用户实体。
 ///
 /// 纯 Dart 类,不依赖 Flutter / Riverpod / Dio —— 这是 domain 层的硬约束:
 /// 任何业务实体都应该能被单元测试单独实例化、不需要 mock 任何框架。
 ///
+/// 因此 **DTO→Entity 的转换不放这里**(那会让 domain 反向依赖 data/dto)。
+/// 转换由 Repository 实现层负责,见 `data/auth_repository_impl.dart`。
+///
 /// 如果将来这个实体被多个无关业务域共享(profile / order / social 都要用),
 /// 应该提到 core/domain/ 或独立成 user/ 域,而不是各自定义同名类。
-
-/// avatar : ""
-/// birthday : 3432523523423
-/// id : 2011645072596279297
-/// nickname : "张三"
-/// phone : "19900000000"
-/// playstyle : ""
-/// registerTime : 1768448535000
-/// selfIntroduction : ""
-/// status : "NORMAL"
-/// token : "ca824a61-21b8-4abd-b3f4-a3afe3daf96d"
-
+///
+/// 后端返回的 JSON 形状(字段名沿用后端风格,见 `LoginResponseDto`):
+/// `avatar / birthday / id / nickname / phone / playstyle / registerTime /
+/// selfIntroduction / status / token`
 class AuthUser {
   AuthUser({
     String? avatar,
@@ -49,23 +42,6 @@ class AuthUser {
     _token = token;
     _refreshToken = refreshToken;
   }
-
-  AuthUser.fromDto(LoginResponseDto dto)
-    : this(
-        avatar: dto.avatar,
-        gender: dto.gender,
-        birthday: dto.birthday,
-        id: dto.id,
-        nickname: dto.nickname,
-        phone: dto.phone,
-        playstyle: dto.playstyle,
-        registerTime: dto.registerTime,
-        selfIntroduction: dto.selfIntroduction,
-        role: dto.role,
-        status: dto.status,
-        token: dto.token,
-        refreshToken: dto.refreshToken,
-      );
 
   AuthUser.fromJson(dynamic json) {
     _avatar = json['avatar'];

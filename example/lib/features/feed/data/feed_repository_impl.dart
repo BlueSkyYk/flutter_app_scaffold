@@ -3,7 +3,26 @@ import 'package:flutter_app_scaffold/flutter_app_scaffold.dart';
 
 import '../domain/feed_item.dart';
 import '../domain/feed_repository.dart';
+import 'dto/feed_item_dto.dart';
 import 'feed_api.dart';
+
+/// DTO → Entity 转换下沉在 data 层,避免 domain 反向依赖 data/dto。
+FeedItem _toFeedItem(FeedItemDto dto) => FeedItem(
+      id: dto.id,
+      userId: dto.userId,
+      userNickname: dto.userNickname,
+      userAvatar: dto.userAvatar,
+      content: dto.content,
+      contentType: dto.contentType,
+      imageUrls: dto.imageUrls,
+      videoUrl: dto.videoUrl,
+      tags: dto.tags,
+      visible: dto.visible,
+      likeCount: dto.likeCount,
+      commentCount: dto.commentCount,
+      liked: dto.liked,
+      createdAt: dto.createdAt,
+    );
 
 /// [FeedRepository] 的实际实现(data 层)。
 ///
@@ -21,7 +40,7 @@ class FeedRepositoryImpl implements FeedRepository {
     int pageSize = 20,
   }) async {
     final dtos = await api.fetch(page: page, pageSize: pageSize);
-    return dtos.cover(list: dtos.list, itemCover: FeedItem.fromDto);
+    return dtos.cover(list: dtos.list, itemCover: _toFeedItem);
   }
 }
 

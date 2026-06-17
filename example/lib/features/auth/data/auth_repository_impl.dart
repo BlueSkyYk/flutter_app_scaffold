@@ -3,7 +3,25 @@ import 'package:flutter_app_scaffold/flutter_app_scaffold.dart';
 import '../domain/auth_repository.dart';
 import '../domain/auth_user.dart';
 import 'auth_api.dart';
+import 'dto/login_response_dto.dart';
 import 'token_storage.dart';
+
+/// DTO → Entity 转换下沉在 data 层,避免 domain 反向依赖 data/dto。
+AuthUser _toAuthUser(LoginResponseDto dto) => AuthUser(
+      avatar: dto.avatar,
+      gender: dto.gender,
+      birthday: dto.birthday,
+      id: dto.id,
+      nickname: dto.nickname,
+      phone: dto.phone,
+      playstyle: dto.playstyle,
+      registerTime: dto.registerTime,
+      selfIntroduction: dto.selfIntroduction,
+      role: dto.role,
+      status: dto.status,
+      token: dto.token,
+      refreshToken: dto.refreshToken,
+    );
 
 /// [AuthRepository] 的实际实现(data 层)。
 ///
@@ -23,7 +41,7 @@ class AuthRepositoryImpl implements AuthRepository {
   @override
   Future<AuthUser> login({required String phone, required String code}) async {
     final dto = await api.login(phone: phone, code: code);
-    final user = AuthUser.fromDto(dto);
+    final user = _toAuthUser(dto);
     if (!user.token.isNullOrEmpty && !user.refreshToken.isNullOrEmpty) {
       await tokens.saveUser(user);
     }
