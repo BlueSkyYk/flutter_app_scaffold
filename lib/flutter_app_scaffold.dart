@@ -42,6 +42,7 @@ export 'src/network/interceptors/auth_interceptor.dart';
 export 'src/network/interceptors/log_interceptor.dart';
 export 'src/network/interceptors/retry_interceptor.dart';
 export 'src/network/interceptors/ui_feedback_interceptor.dart';
+export 'src/network/network_log_config.dart';
 export 'src/network/ui_feedback.dart';
 
 // Router

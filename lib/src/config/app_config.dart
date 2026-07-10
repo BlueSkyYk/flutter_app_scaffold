@@ -1,5 +1,6 @@
 import 'package:flutter/widgets.dart';
 
+import '../network/network_log_config.dart';
 import 'app_env.dart';
 
 class AppConfig {
@@ -10,6 +11,7 @@ class AppConfig {
     this.receiveTimeout = const Duration(seconds: 15),
     this.sendTimeout = const Duration(seconds: 15),
     this.enableNetworkLog = true,
+    this.networkLogConfig = const NetworkLogConfig(),
     this.designSize = const Size(375, 812),
     this.minTextAdapt = true,
     this.splitScreenMode = false,
@@ -22,6 +24,7 @@ class AppConfig {
   final Duration receiveTimeout;
   final Duration sendTimeout;
   final bool enableNetworkLog;
+  final NetworkLogConfig networkLogConfig;
 
   /// 设计稿尺寸（逻辑像素），用于 flutter_screenutil 等比缩放。
   ///

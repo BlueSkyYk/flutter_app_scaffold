@@ -9,6 +9,7 @@ import 'interceptors/auth_interceptor.dart';
 import 'interceptors/log_interceptor.dart';
 import 'interceptors/retry_interceptor.dart';
 import 'interceptors/ui_feedback_interceptor.dart';
+import 'network_log_config.dart';
 import 'ui_feedback.dart';
 
 /// dio 封装。提供 [request]/[get]/[post] 等方法，自动把异常映射成 [ApiException]，
@@ -29,7 +30,7 @@ class DioClient {
           ),
         );
     if (cfg.enableNetworkLog) {
-      _dio.interceptors.add(AppLogInterceptor());
+      _dio.interceptors.add(AppLogInterceptor(config: cfg.networkLogConfig));
     }
   }
 
@@ -41,6 +42,19 @@ class DioClient {
   /// 追加一个拦截器。注意拦截器顺序：先添加的先处理 request、后处理 response。
   void addInterceptor(Interceptor interceptor) {
     _dio.interceptors.add(interceptor);
+  }
+
+  /// 启用网络日志拦截器。
+  ///
+  /// 构造函数会在 [AppConfig.enableNetworkLog] 为 true 时自动启用一次。
+  /// 如果业务需要控制拦截器位置（例如先打印原始响应、再在鉴权后打印最终请求头），
+  /// 可以把全局自动开关设为 false，再在合适的位置手动调用本方法。
+  void enableNetworkLog({
+    bool enabled = true,
+    NetworkLogConfig config = const NetworkLogConfig(),
+  }) {
+    if (!enabled) return;
+    addInterceptor(AppLogInterceptor(config: config));
   }
 
   /// 启用重试拦截器。内部自动绑定到当前 [Dio] 实例，避免外部传错。
